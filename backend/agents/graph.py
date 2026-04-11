@@ -151,7 +151,8 @@ async def node_pi_analyze(state: LabState) -> LabState:
 async def node_alphafold(state: LabState) -> LabState:
     """Tool node: look up protein structures via AlphaFold/UniProt API, fetch per-residue pLDDT, and predict binding interface."""
     entities = state.get("entities", [])
-    proteins = [e for e in entities if e.get("type") == "protein"][:2]
+    # Include both "protein" and "gene" entities since genes encode proteins
+    proteins = [e for e in entities if e.get("type") in ("protein", "gene")][:2]
     af_results: List[dict] = []
     per_residue_plddt: Dict[str, List[dict]] = {}
 
