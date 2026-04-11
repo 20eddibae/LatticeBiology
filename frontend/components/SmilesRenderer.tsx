@@ -21,7 +21,11 @@ export default function SmilesRenderer({
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!smiles || !canvasRef.current) return;
+    if (!smiles || !canvasRef.current) {
+      setLoaded(true); // Mark as loaded even if no SMILES so layout doesn't break
+      return;
+    }
+
     setError(false);
     setLoaded(false);
 
