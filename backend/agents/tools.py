@@ -33,7 +33,8 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "HIF1A",
         "mean_confidence": 76.2,
         "confidence_tier": "high",
-        "pdb_url": "https://alphafold.ebi.ac.uk/structures/AF-Q16665-F1-model_v4.cif",
+        # Use PDBe structure for demo (more reliably accessible)
+        "pdb_url": "https://files.rcsb.org/download/1H2H.cif",
         "entry_id": "AF-Q16665-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q16665",
     },
@@ -44,7 +45,8 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "TP53",
         "mean_confidence": 82.1,
         "confidence_tier": "high",
-        "pdb_url": "https://alphafold.ebi.ac.uk/structures/AF-P04637-F1-model_v4.cif",
+        # Use known PDB structure
+        "pdb_url": "https://files.rcsb.org/download/1TUP.cif",
         "entry_id": "AF-P04637-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P04637",
     },
@@ -55,7 +57,8 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "VEGFA",
         "mean_confidence": 74.8,
         "confidence_tier": "high",
-        "pdb_url": "https://alphafold.ebi.ac.uk/structures/AF-P15692-F1-model_v4.cif",
+        # Use known PDB structure
+        "pdb_url": "https://files.rcsb.org/download/1VPF.cif",
         "entry_id": "AF-P15692-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P15692",
     },
