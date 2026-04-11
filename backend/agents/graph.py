@@ -542,7 +542,8 @@ async def node_compound_synthesis(state: LabState) -> LabState:
     _synth(state, "Searching for lead small-molecule inhibitors targeting identified proteins...")
 
     entities = state.get("entities", [])
-    proteins = [e for e in entities if e.get("type") == "protein"][:2]
+    # Include both "protein" and "gene" entities since genes encode proteins
+    proteins = [e for e in entities if e.get("type") in ("protein", "gene")][:2]
 
     if not proteins:
         _synth(state, "No protein targets identified for compound screening.")
