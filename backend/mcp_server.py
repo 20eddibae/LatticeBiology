@@ -194,6 +194,51 @@ async def list_tools() -> list[Tool]:
                 "required": ["query"],
             },
         ),
+        Tool(
+            name="predict_docking",
+            description=(
+                "Predict drug-target binding compatibility using molecular property-based "
+                "heuristic scoring (Lipinski/Veber). Returns an overall score, tier "
+                "(favorable/moderate/unfavorable), and component breakdowns."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "compound": {
+                        "type": "string",
+                        "description": "Compound/drug name (e.g., 'olaparib', 'ibuprofen')",
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Target protein name (e.g., 'PARP1', 'EGFR')",
+                    },
+                },
+                "required": ["compound", "target"],
+            },
+        ),
+        Tool(
+            name="get_knowledge_graph",
+            description=(
+                "Query the biological knowledge graph. Returns a Cytoscape.js-compatible "
+                "subgraph around specified entities, including relationship types "
+                "(activates, inhibits, binds_to, etc.) and confidence scores."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "nodes": {
+                        "type": "string",
+                        "description": "Comma-separated entity names (e.g., 'BRCA1,TP53'). Empty for full graph.",
+                        "default": "",
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Hop depth for subgraph extraction (default: 1)",
+                        "default": 1,
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -363,6 +408,45 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     "organism": d["organism"],
                     "sample_count": d["sample_count"],
                 } for d in datasets],
+            }, indent=2),
+        )]
+
+    elif name == "predict_docking":
+        from agents.docking import predict_docking
+
+        compound = arguments["compound"]
+        target = arguments["target"]
+        result = await predict_docking(compound, target)
+
+        return [TextContent(
+            type="text",
+            text=json.dumps({
+                "status": result.get("status", "error"),
+                **result,
+            }, indent=2),
+        )]
+
+    elif name == "get_knowledge_graph":
+        from knowledge_graph import knowledge_graph as kg
+
+        nodes_str = arguments.get("nodes", "")
+        depth = arguments.get("depth", 1)
+
+        if nodes_str.strip():
+            node_ids = [n.strip().upper() for n in nodes_str.split(",") if n.strip()]
+            sub = kg.subgraph(node_ids, depth=depth)
+        else:
+            sub = kg
+
+        cyto = sub.to_cytoscape_json()
+
+        return [TextContent(
+            type="text",
+            text=json.dumps({
+                "status": "success",
+                "node_count": len(cyto["nodes"]),
+                "edge_count": len(cyto["edges"]),
+                "elements": cyto,
             }, indent=2),
         )]
 

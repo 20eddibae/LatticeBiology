@@ -342,15 +342,65 @@ export interface AlphaFoldResult {
   alphafold_url: string;
 }
 
+export interface DockingResult {
+  compound: string;
+  target: string;
+  status: "predicted" | "no_data" | "error";
+  smiles?: string;
+  molecular_weight?: number;
+  xlogp?: number;
+  overall_score: number;
+  tier: "favorable" | "moderate" | "unfavorable";
+  interpretation?: string;
+  component_scores?: {
+    lipinski_compliance: number;
+    veber_bioavailability: number;
+    mw_complementarity: number;
+  };
+}
+
+export interface ValidationPlan {
+  validation_plans: Array<{
+    hypothesis_index: number;
+    experiment_name: string;
+    assay_type: string;
+    model_system: string;
+    controls: { positive: string; negative: string };
+    readout: string;
+    expected_outcome: string;
+    feasibility: "high" | "medium" | "low";
+    estimated_timeline: string;
+    key_reagents: string[];
+  }>;
+  docking_recommendations: Array<{ compound: string; target: string; rationale: string }>;
+  overall_feasibility: string;
+}
+
+export interface GraphInsights {
+  summary?: string;
+  contradictions_interpretation?: string[];
+  research_opportunities?: Array<{ entity: string; reason: string; suggested_experiment: string }>;
+  network_insights?: string[];
+}
+
+export interface KGSubgraph {
+  node_count: number;
+  edge_count: number;
+  elements: {
+    nodes: Array<{ data: { id: string; label: string; entity_type: string; source_count: number } }>;
+    edges: Array<{ data: { id: string; source: string; target: string; relationship: string; confidence: number } }>;
+  };
+}
+
 export interface AgentMessage {
   id: string;
   agent_name: string;
-  agent_role: "orchestrator" | "specialist" | "critic";
+  agent_role: "orchestrator" | "specialist" | "critic" | "analyst" | "experimentalist";
   agent_color: string;
   content: string;
   timestamp: string;
   message_type: "message" | "tool_call" | "tool_result" | "final" | "error";
-  tool_data?: AlphaFoldResult | null;
+  tool_data?: AlphaFoldResult | DockingResult | null;
 }
 
 export interface LabEntity {
@@ -366,8 +416,11 @@ export interface LabSession {
   messages: AgentMessage[];
   entities_found: LabEntity[];
   alphafold_results: AlphaFoldResult[];
+  graph_insights: GraphInsights;
   hypotheses: string[];
   critique: string;
+  docking_results: DockingResult[];
+  validation_plan: ValidationPlan;
   final_summary: string;
   created_at: string;
   completed_at?: string | null;
@@ -404,8 +457,11 @@ export function streamLabSession(
       status: LabSession["status"];
       entities_found: LabEntity[];
       alphafold_results: AlphaFoldResult[];
+      graph_insights: GraphInsights;
       hypotheses: string[];
       critique: string;
+      docking_results: DockingResult[];
+      validation_plan: ValidationPlan;
       final_summary: string;
     }) => void;
     onDone: (session: LabSession) => void;
@@ -440,4 +496,23 @@ export function streamLabSession(
   };
 
   return () => es.close();
+}
+
+// ─── Knowledge Graph API ────────────────────────────────────────────────────
+
+export async function fetchKGSubgraph(nodes: string = "", depth: number = 1): Promise<KGSubgraph | null> {
+  const params = new URLSearchParams();
+  if (nodes) params.set("nodes", nodes);
+  params.set("depth", String(depth));
+  return safeFetch<KGSubgraph>(`${BASE_URL}/api/knowledge-graph/subgraph?${params}`);
+}
+
+export async function fetchKGStats(): Promise<{ node_count: number; edge_count: number; entity_types: Record<string, number> } | null> {
+  return safeFetch<any>(`${BASE_URL}/api/knowledge-graph/stats`);
+}
+
+// ─── Docking API ────────────────────────────────────────────────────────────
+
+export async function fetchDockingPrediction(compound: string, target: string): Promise<DockingResult | null> {
+  return safeFetch<DockingResult>(`${BASE_URL}/api/docking/predict?compound=${encodeURIComponent(compound)}&target=${encodeURIComponent(target)}`);
 }

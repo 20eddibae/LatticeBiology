@@ -8,7 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@types/cytoscape": "^3.21.9",
     "clsx": "^2.1.1",
+    "cytoscape": "^3.33.2",
     "framer-motion": "^11.3.0",
     "lucide-react": "^0.400.0",
     "molstar": "^5.8.0",

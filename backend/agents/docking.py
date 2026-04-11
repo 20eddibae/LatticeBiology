@@ -15,13 +15,23 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _to_float(val: Any) -> Optional[float]:
+    """Safely convert a value to float (PubChem sometimes returns strings)."""
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _lipinski_score(props: dict) -> float:
     """Score 0-1 based on Lipinski Rule of Five compliance."""
     violations = 0
-    mw = props.get("molecular_weight")
-    logp = props.get("xlogp")
-    hbd = props.get("hbd")
-    hba = props.get("hba")
+    mw = _to_float(props.get("molecular_weight"))
+    logp = _to_float(props.get("xlogp"))
+    hbd = _to_float(props.get("hbd"))
+    hba = _to_float(props.get("hba"))
 
     if mw is not None and mw > 500:
         violations += 1
@@ -38,9 +48,9 @@ def _lipinski_score(props: dict) -> float:
 def _veber_score(props: dict) -> float:
     """Score 0-1 based on Veber oral bioavailability rules."""
     score = 1.0
-    rot = props.get("rotatable_bonds")
-    hba = props.get("hba")
-    hbd = props.get("hbd")
+    rot = _to_float(props.get("rotatable_bonds"))
+    hba = _to_float(props.get("hba"))
+    hbd = _to_float(props.get("hbd"))
     tpsa_proxy = ((hba or 0) * 20 + (hbd or 0) * 25)  # rough TPSA proxy
 
     if rot is not None and rot > 10:
@@ -51,8 +61,9 @@ def _veber_score(props: dict) -> float:
     return max(0.0, score)
 
 
-def _mw_complementarity(mw: Optional[float]) -> float:
+def _mw_complementarity(mw: Any) -> float:
     """Proteins interact better with compounds in optimal MW range (200-500)."""
+    mw = _to_float(mw)
     if mw is None:
         return 0.5
     if 200 <= mw <= 500:

@@ -444,31 +444,43 @@ def should_revise(state: LabState) -> Literal["revise", "synthesize"]:
 
 
 def build_lab_graph() -> Any:
-    """Construct and compile the LangGraph state machine."""
+    """
+    Construct and compile the LangGraph state machine.
+
+    Pipeline:
+      pi_analyze → insight → alphafold → hypothesis → critic
+        → (optional revision) → docking → validation → synthesize
+    """
     graph = StateGraph(LabState)
 
     # Add nodes
     graph.add_node("pi_analyze", node_pi_analyze)
+    graph.add_node("insight", node_insight)
     graph.add_node("alphafold", node_alphafold)
     graph.add_node("hypothesis", node_hypothesis)
     graph.add_node("critic", node_critic)
+    graph.add_node("docking", node_docking)
+    graph.add_node("validation", node_validation)
     graph.add_node("synthesize", node_synthesize)
 
     # Linear edges
-    graph.add_edge("pi_analyze", "alphafold")
+    graph.add_edge("pi_analyze", "insight")
+    graph.add_edge("insight", "alphafold")
     graph.add_edge("alphafold", "hypothesis")
     graph.add_edge("hypothesis", "critic")
 
-    # Conditional: critic → revise (hypothesis) or synthesize
+    # Conditional: critic → revise (hypothesis) or proceed to docking
     graph.add_conditional_edges(
         "critic",
         should_revise,
         {
             "revise": "hypothesis",
-            "synthesize": "synthesize",
+            "synthesize": "docking",
         },
     )
 
+    graph.add_edge("docking", "validation")
+    graph.add_edge("validation", "synthesize")
     graph.add_edge("synthesize", END)
     graph.set_entry_point("pi_analyze")
 
@@ -503,9 +515,12 @@ async def run_lab_graph(
         "entities": [],
         "analysis": {},
         "alphafold_results": [],
+        "graph_insights": {},
         "hypotheses": [],
         "key_unknowns": [],
         "critique": {},
+        "docking_results": [],
+        "validation_plan": {},
         "revision_count": 0,
         "final_summary": "",
         "token_usage": {},

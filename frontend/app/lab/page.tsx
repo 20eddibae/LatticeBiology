@@ -21,6 +21,9 @@ import {
   Brain,
   Sparkles,
   Clock,
+  Network,
+  TestTubes,
+  Beaker,
   type LucideProps,
 } from "lucide-react";
 import clsx from "clsx";
@@ -32,6 +35,11 @@ import {
   type AgentMessage,
   type AlphaFoldResult,
   type LabEntity,
+  type DockingResult,
+  type ValidationPlan,
+  type GraphInsights,
+  type KGSubgraph,
+  fetchKGSubgraph,
 } from "@/lib/api";
 
 // Dynamic import Mol* viewer (heavy WebGL — avoid SSR)
@@ -47,6 +55,19 @@ const MolstarViewer = dynamic(() => import("@/components/MolstarViewer"), {
   ),
 });
 
+// Dynamic import NetworkGraph (depends on cytoscape — avoid SSR)
+const NetworkGraph = dynamic(() => import("@/components/NetworkGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[280px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <div className="text-center">
+        <Network size={20} className="mx-auto text-slate-300 mb-2 animate-pulse" />
+        <p className="text-[11px] text-slate-400">Loading network graph…</p>
+      </div>
+    </div>
+  ),
+});
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EXAMPLE_QUERIES = [
@@ -57,9 +78,11 @@ const EXAMPLE_QUERIES = [
 ];
 
 const AGENT_CONFIG: Record<string, { short: string; Icon: React.ComponentType<LucideProps>; bubble: string }> = {
-  orchestrator: { short: "PI",  Icon: Brain,      bubble: "agent-bubble-orchestrator" },
-  specialist:   { short: "HYP", Icon: Lightbulb,  bubble: "agent-bubble-specialist"   },
-  critic:       { short: "CR",  Icon: ShieldCheck, bubble: "agent-bubble-critic"       },
+  orchestrator:    { short: "PI",  Icon: Brain,      bubble: "agent-bubble-orchestrator" },
+  specialist:      { short: "HYP", Icon: Lightbulb,  bubble: "agent-bubble-specialist"   },
+  critic:          { short: "CR",  Icon: ShieldCheck, bubble: "agent-bubble-critic"       },
+  analyst:         { short: "IN",  Icon: Network,    bubble: "agent-bubble-analyst"       },
+  experimentalist: { short: "VAL", Icon: TestTubes,  bubble: "agent-bubble-experimentalist" },
 };
 
 const ENTITY_STYLE: Record<string, { color: string; bg: string; Icon: React.ComponentType<LucideProps> }> = {
@@ -296,9 +319,12 @@ function EntityList({ entities }: { entities: LabEntity[] }) {
 
 const PIPELINE_NODES = [
   { id: "pi_analyze",  label: "PI Analysis",   color: "#0F766E", Icon: Brain      },
+  { id: "insight",     label: "Graph Insight",  color: "#2563EB", Icon: Network    },
   { id: "alphafold",   label: "AlphaFold",     color: "#0F766E", Icon: Atom       },
   { id: "hypothesis",  label: "Hypothesis",    color: "#7C3AED", Icon: Lightbulb  },
   { id: "critic",      label: "Critic Review", color: "#D97706", Icon: ShieldCheck},
+  { id: "docking",     label: "Docking",       color: "#059669", Icon: Beaker     },
+  { id: "validation",  label: "Validation",    color: "#059669", Icon: TestTubes  },
   { id: "synthesize",  label: "Synthesis",     color: "#059669", Icon: Sparkles   },
 ];
 
@@ -425,11 +451,13 @@ export default function LabPage() {
       onMessage: (msg) => {
         setSession((prev) => {
           if (!prev) return prev;
-          // Detect active node from agent role
+          // Detect active pipeline node from agent role + message type
           const nodeMap: Record<string, string> = {
             orchestrator: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "alphafold" : "pi_analyze",
             specialist: "hypothesis",
             critic: "critic",
+            analyst: "insight",
+            experimentalist: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "docking" : "validation",
           };
           if (msg.message_type === "final") {
             setActiveNode("synthesize");
@@ -447,8 +475,11 @@ export default function LabPage() {
             status: data.status,
             entities_found: data.entities_found,
             alphafold_results: data.alphafold_results,
+            graph_insights: data.graph_insights ?? {},
             hypotheses: data.hypotheses,
             critique: data.critique,
+            docking_results: data.docking_results ?? [],
+            validation_plan: data.validation_plan ?? ({} as ValidationPlan),
             final_summary: data.final_summary,
           };
         });
@@ -491,8 +522,11 @@ export default function LabPage() {
       messages: [],
       entities_found: [],
       alphafold_results: [],
+      graph_insights: {},
       hypotheses: [],
       critique: "",
+      docking_results: [],
+      validation_plan: {} as ValidationPlan,
       final_summary: "",
       created_at: new Date().toISOString(),
     });
@@ -520,7 +554,7 @@ export default function LabPage() {
               </span>
             </div>
             <p className="text-sm text-slate-500">
-              Multi-agent pipeline: PI orchestrator → Hypothesis specialist → Adversarial critic · AlphaFold integration
+              Multi-agent pipeline: PI → Insight → AlphaFold → Hypothesis → Critic → Docking → Validation → Synthesis
             </p>
           </div>
           {session && <StatusBadge status={session.status} />}
@@ -598,11 +632,13 @@ export default function LabPage() {
               Enter a research question above. The PI agent will parse it, dispatch specialist agents,
               fetch AlphaFold structural predictions, generate hypotheses, and run adversarial peer review.
             </p>
-            <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="mt-5 grid grid-cols-5 gap-2">
               {[
                 { label: "PI Orchestrator", color: "#0F766E", Icon: Brain },
+                { label: "Insight Agent", color: "#2563EB", Icon: Network },
                 { label: "Hypothesis Agent", color: "#7C3AED", Icon: Lightbulb },
                 { label: "Critic Agent", color: "#D97706", Icon: ShieldCheck },
+                { label: "Validation Agent", color: "#059669", Icon: TestTubes },
               ].map(({ label, color, Icon }) => (
                 <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-card">
                   <div
@@ -755,14 +791,107 @@ export default function LabPage() {
               </div>
             )}
 
+            {/* Graph Insights */}
+            {session.graph_insights?.summary && (
+              <div className="section-panel p-4 section-accent-blue">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                  Graph Insights
+                </p>
+                <p className="text-[11px] text-slate-700 leading-relaxed mb-2">{session.graph_insights.summary}</p>
+                {session.graph_insights.research_opportunities && session.graph_insights.research_opportunities.length > 0 && (
+                  <div className="space-y-1.5 mt-2">
+                    {session.graph_insights.research_opportunities.slice(0, 3).map((opp, i) => (
+                      <div key={i} className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-1.5">
+                        <p className="text-[10px] font-semibold text-blue-800">{opp.entity}</p>
+                        <p className="text-[10px] text-blue-600">{opp.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Docking Results */}
+            {session.docking_results && session.docking_results.length > 0 && (
+              <div className="section-panel p-4 section-accent-teal">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                  Docking Predictions ({session.docking_results.length})
+                </p>
+                <div className="space-y-2">
+                  {session.docking_results.map((d, i) => {
+                    const scoreColor = d.tier === "favorable" ? "#059669" : d.tier === "moderate" ? "#D97706" : "#DC2626";
+                    return (
+                      <div key={i} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[11px] font-semibold text-slate-800">{d.compound}</p>
+                          <span
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                            style={{ backgroundColor: scoreColor + "18", color: scoreColor }}
+                          >
+                            {(d.overall_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">→ {d.target}</p>
+                        <div className="h-1.5 rounded-full bg-slate-100 mt-1.5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${d.overall_score * 100}%`, backgroundColor: scoreColor }}
+                          />
+                        </div>
+                        <p className="text-[9px] mt-1" style={{ color: scoreColor }}>
+                          {d.tier.toUpperCase()}
+                          {d.smiles && ` · MW ${d.molecular_weight ?? "?"}`}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Validation Plans */}
+            {session.validation_plan?.validation_plans && session.validation_plan.validation_plans.length > 0 && (
+              <div className="section-panel p-4 section-accent-teal">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                  Validation Plans ({session.validation_plan.validation_plans.length})
+                </p>
+                <div className="space-y-2">
+                  {session.validation_plan.validation_plans.map((vp, i) => {
+                    const feasColor = vp.feasibility === "high" ? "#059669" : vp.feasibility === "medium" ? "#D97706" : "#DC2626";
+                    return (
+                      <div key={i} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                        <p className="text-[11px] font-semibold text-slate-800 mb-1">{vp.experiment_name}</p>
+                        <p className="text-[10px] text-slate-500">{vp.assay_type} · {vp.model_system}</p>
+                        <p className="text-[10px] text-slate-600 mt-1 italic">{vp.expected_outcome}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span
+                            className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                            style={{ backgroundColor: feasColor + "18", color: feasColor }}
+                          >
+                            {vp.feasibility} feasibility
+                          </span>
+                          <span className="text-[9px] text-slate-400">{vp.estimated_timeline}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {session.validation_plan.overall_feasibility && (
+                  <p className="text-[10px] text-slate-600 mt-2 italic">{session.validation_plan.overall_feasibility}</p>
+                )}
+              </div>
+            )}
+
             {/* Agent legend */}
             <div className="section-panel p-4">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">Agent Legend</p>
               <div className="space-y-2">
                 {[
-                  { name: "PI Agent",         role: "Orchestrator", color: "#0F766E", short: "PI",  Icon: Brain      },
-                  { name: "Hypothesis Agent", role: "Specialist",   color: "#7C3AED", short: "HYP", Icon: Lightbulb  },
-                  { name: "Critic Agent",     role: "Peer reviewer",color: "#D97706", short: "CR",  Icon: ShieldCheck},
+                  { name: "PI Agent",         role: "Orchestrator",    color: "#0F766E", short: "PI",  Icon: Brain      },
+                  { name: "Insight Agent",    role: "Graph analyst",   color: "#2563EB", short: "IN",  Icon: Network    },
+                  { name: "Hypothesis Agent", role: "Specialist",      color: "#7C3AED", short: "HYP", Icon: Lightbulb  },
+                  { name: "Critic Agent",     role: "Peer reviewer",   color: "#D97706", short: "CR",  Icon: ShieldCheck},
+                  { name: "Validation Agent", role: "Experimentalist", color: "#059669", short: "VAL", Icon: TestTubes  },
                 ].map(({ name, role, color, short, Icon }) => (
                   <div key={name} className="flex items-center gap-2">
                     <div

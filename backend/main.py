@@ -384,6 +384,27 @@ async def kg_contradictions() -> List[Dict[str, Any]]:
     return [{"edge_a": a, "edge_b": b} for a, b in raw]
 
 
+@app.get("/api/docking/predict", tags=["Docking"])
+async def docking_predict(
+    compound: str = "ibuprofen",
+    target: str = "COX-2",
+) -> Dict[str, Any]:
+    """Heuristic docking prediction for a compound-target pair."""
+    from agents.docking import predict_docking
+    return await predict_docking(compound, target)
+
+
+@app.get("/api/docking/batch", tags=["Docking"])
+async def docking_batch(
+    compounds: str = "ibuprofen,aspirin",
+    target: str = "COX-2",
+) -> List[Dict[str, Any]]:
+    """Batch docking prediction. Comma-separated compound names."""
+    from agents.docking import batch_docking
+    compound_list = [c.strip() for c in compounds.split(",") if c.strip()]
+    return await batch_docking(compound_list, target)
+
+
 @app.get("/api/knowledge-graph/underexplored", tags=["Knowledge Graph"])
 async def kg_underexplored(
     min_sources: int = 2,
@@ -435,8 +456,11 @@ async def start_lab_session(
         "messages": [],
         "entities_found": [],
         "alphafold_results": [],
+        "graph_insights": {},
         "hypotheses": [],
         "critique": "",
+        "docking_results": [],
+        "validation_plan": {},
         "final_summary": "",
         "created_at": now,
         "completed_at": None,
@@ -506,8 +530,11 @@ async def stream_lab_session(session_id: str, request: Request):
                         "status": current_status,
                         "entities_found": session.get("entities_found", []),
                         "alphafold_results": session.get("alphafold_results", []),
+                        "graph_insights": session.get("graph_insights", {}),
                         "hypotheses": session.get("hypotheses", []),
                         "critique": session.get("critique", ""),
+                        "docking_results": session.get("docking_results", []),
+                        "validation_plan": session.get("validation_plan", {}),
                         "final_summary": session.get("final_summary", ""),
                     }),
                 }
