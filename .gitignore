@@ -19,3 +19,8 @@ build/
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+
+CLAUDE.md
+
+

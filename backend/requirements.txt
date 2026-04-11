@@ -28,5 +28,8 @@ langchain-core>=0.2.0
 # MCP (Model Context Protocol) server
 mcp>=1.0.0
 
+# Knowledge graph
+networkx>=3.3
+
 # Local SLM inference (fallback)
 ollama>=0.4.0
