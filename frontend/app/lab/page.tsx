@@ -44,6 +44,7 @@ import {
   type LeadCompound,
   type BindingEnergyMatrix,
   fetchKGSubgraph,
+  fetchPPINetwork,
 } from "@/lib/api";
 
 // Dynamic import Mol* viewer (heavy WebGL — avoid SSR)
@@ -78,6 +79,16 @@ const ConfidenceTelemetry = dynamic(() => import("@/components/ConfidenceTelemet
   loading: () => (
     <div className="h-[200px] rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center">
       <p className="text-[11px] text-slate-500">Loading telemetry...</p>
+    </div>
+  ),
+});
+
+// Dynamic import ResultsDashboard
+const ResultsDashboard = dynamic(() => import("@/components/ResultsDashboard"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <p className="text-[11px] text-slate-400">Loading dashboard...</p>
     </div>
   ),
 });
@@ -460,6 +471,7 @@ export default function LabPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeNode, setActiveNode] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"timeline" | "dashboard">("timeline");
   const timelineRef = useRef<HTMLDivElement>(null);
   const cleanupStreamRef = useRef<(() => void) | null>(null);
 
@@ -688,7 +700,57 @@ export default function LabPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0 gap-0">
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* View toggle */}
+          {session.status === "completed" && (
+            <div className="px-5 pt-3 pb-1 bg-white border-b border-slate-200 flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                <button
+                  onClick={() => setViewMode("timeline")}
+                  className={clsx(
+                    "px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-200",
+                    viewMode === "timeline"
+                      ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+                      : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  Agent Timeline
+                </button>
+                <button
+                  onClick={() => setViewMode("dashboard")}
+                  className={clsx(
+                    "px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-200",
+                    viewMode === "dashboard"
+                      ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+                      : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  Results Dashboard
+                </button>
+              </div>
+            </div>
+          )}
+
+          <AnimatePresence mode="wait">
+          {viewMode === "dashboard" && session.status === "completed" ? (
+            <motion.div
+              key="dashboard"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 overflow-y-auto p-5 bg-slate-50"
+            >
+              <ResultsDashboard
+                alphafoldResults={session.alphafold_results}
+                perResiduePlddt={session.per_residue_plddt ?? {}}
+                bindingInterface={session.binding_interface}
+                bindingEnergyMatrix={session.binding_energy_matrix}
+                leadCompounds={session.lead_compounds ?? []}
+              />
+            </motion.div>
+          ) : (
+          <div key="timeline" className="flex flex-1 min-h-0 gap-0">
           {/* ── Agent timeline (left) ──────────────────────────────────── */}
           <div
             ref={timelineRef}
@@ -981,6 +1043,9 @@ export default function LabPage() {
               </div>
             </div>
           </div>
+        </div>
+          )}
+          </AnimatePresence>
         </div>
       )}
     </div>
