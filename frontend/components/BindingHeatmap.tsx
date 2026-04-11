@@ -51,8 +51,16 @@ export default function BindingHeatmap({ matrix, className = "" }: BindingHeatma
     visible: false, x: 0, y: 0, row: "", col: "", value: 0,
   });
 
+  if (!matrix) return null;
+
   const { rows, cols, values, unit } = matrix;
-  if (!rows?.length || !cols?.length || !values?.length) return null;
+  if (!rows?.length || !cols?.length || !values?.length) {
+    return (
+      <div className="flex items-center justify-center h-[200px] text-slate-400 text-[11px]">
+        No energy data available
+      </div>
+    );
+  }
 
   const cellSize = 44;
   const labelWidth = 70;
