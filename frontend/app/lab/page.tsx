@@ -482,6 +482,13 @@ export default function LabPage() {
     }
   }, [session?.messages.length]);
 
+  // Auto-switch to dashboard when session completes
+  useEffect(() => {
+    if (session?.status === "completed" && viewMode === "timeline") {
+      setViewMode("dashboard");
+    }
+  }, [session?.status]);
+
   // SSE streaming
   const stopStream = useCallback(() => {
     if (cleanupStreamRef.current) {
@@ -521,6 +528,10 @@ export default function LabPage() {
             status: data.status,
             entities_found: data.entities_found,
             alphafold_results: data.alphafold_results,
+            per_residue_plddt: data.per_residue_plddt ?? {},
+            binding_interface: data.binding_interface ?? {},
+            binding_energy_matrix: data.binding_energy_matrix ?? {},
+            lead_compounds: data.lead_compounds ?? [],
             graph_insights: data.graph_insights ?? {},
             hypotheses: data.hypotheses,
             critique: data.critique,
