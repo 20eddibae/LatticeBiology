@@ -38,21 +38,24 @@ class LabState(TypedDict, total=False):
     entities: List[dict]
     analysis: Dict[str, Any]
     alphafold_results: List[dict]
+    graph_insights: Dict[str, Any]
     hypotheses: List[dict]
     key_unknowns: List[str]
     critique: Dict[str, Any]
+    docking_results: List[dict]
+    validation_plan: Dict[str, Any]
     revision_count: int
     final_summary: str
 
     # Observability
-    token_usage: Dict[str, int]  # {"pi": N, "hypothesis": N, "critic": N}
+    token_usage: Dict[str, int]
 
 
 # ---------------------------------------------------------------------------
 # Agent instances (reuse from orchestrator module)
 # ---------------------------------------------------------------------------
 
-from .orchestrator import pi_agent, hypothesis_agent, critic_agent  # noqa: E402
+from .orchestrator import pi_agent, hypothesis_agent, critic_agent, insight_agent, validation_agent  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +101,14 @@ def _hyp(state: LabState, content: str) -> None:
 
 def _crit(state: LabState, content: str) -> None:
     _push_msg(state, "Critic Agent", "critic", "#D97706", content)
+
+
+def _insight(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
+    _push_msg(state, "Insight Agent", "analyst", "#2563EB", content, msg_type, tool_data)
+
+
+def _val(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
+    _push_msg(state, "Validation Agent", "experimentalist", "#059669", content, msg_type, tool_data)
 
 
 # ---------------------------------------------------------------------------
@@ -235,15 +246,161 @@ async def node_critic(state: LabState) -> LabState:
     return {**state, "critique": critique}
 
 
+async def node_insight(state: LabState) -> LabState:
+    """Insight Agent: analyze the knowledge graph for patterns relevant to the query."""
+    _insight(state, "Scanning knowledge graph for contradictions, underexplored pathways, and network patterns...")
+
+    from knowledge_graph import knowledge_graph as kg
+
+    # Extract entity names for subgraph query
+    entity_names = [e["name"].upper() for e in state.get("entities", [])]
+
+    # Gather KG data
+    kg_stats = {
+        "node_count": kg.node_count,
+        "edge_count": kg.edge_count,
+    }
+
+    contradictions_raw = kg.find_contradictions()
+    contradictions = [{"edge_a": a, "edge_b": b} for a, b in contradictions_raw]
+
+    underexplored_raw = kg.find_underexplored(min_sources=2, max_degree=5)
+    underexplored = [
+        {"id": n.id, "entity_type": n.entity_type,
+         "source_count": len(n.source_accessions), "degree": n.metadata.get("degree", 0)}
+        for n in underexplored_raw[:10]
+    ]
+
+    # Subgraph around query entities
+    if entity_names:
+        sub = kg.subgraph(entity_names, depth=1)
+        sub_cyto = sub.to_cytoscape_json()
+        subgraph_entities = [n["data"]["id"] for n in sub_cyto["nodes"]]
+    else:
+        subgraph_entities = []
+
+    _insight(
+        state,
+        f"Knowledge graph: **{kg_stats['node_count']}** entities, **{kg_stats['edge_count']}** relationships\n"
+        f"Contradictions: **{len(contradictions)}** | Underexplored: **{len(underexplored)}**"
+    )
+
+    # LLM interpretation
+    insights = await insight_agent.analyze_graph(
+        state["query"], kg_stats, contradictions, underexplored, subgraph_entities,
+    )
+
+    _insight(state, f"**Graph Analysis Summary:**\n{insights.get('summary', '')}")
+
+    for opp in insights.get("research_opportunities", [])[:3]:
+        _insight(
+            state,
+            f"Research opportunity: **{opp.get('entity', '')}** — {opp.get('reason', '')}\n"
+            f"Suggested experiment: *{opp.get('suggested_experiment', '')}*"
+        )
+
+    # Push to session
+    session = state["sessions_ref"].get(state["session_id"])
+    if session:
+        session["graph_insights"] = insights
+
+    return {**state, "graph_insights": insights}
+
+
+async def node_docking(state: LabState) -> LabState:
+    """Tool node: run heuristic docking predictions for compounds + targets."""
+    from .docking import predict_docking
+
+    entities = state.get("entities", [])
+    compounds = [e for e in entities if e.get("type") in ("compound", "drug")][:3]
+    proteins = [e for e in entities if e.get("type") == "protein"][:2]
+
+    if not compounds or not proteins:
+        _val(state, "No compound-protein pairs identified for docking prediction.")
+        return {**state, "docking_results": []}
+
+    docking_results = []
+    for comp in compounds:
+        for prot in proteins:
+            _val(
+                state,
+                f"Docking prediction: **{comp['name']}** → **{prot['name']}**",
+                msg_type="tool_call",
+            )
+            result = await predict_docking(comp["name"], prot["name"])
+            docking_results.append(result)
+
+            if result.get("status") == "predicted":
+                score = result["overall_score"]
+                tier = result["tier"].upper()
+                _val(
+                    state,
+                    f"**{comp['name']}** → **{prot['name']}**: Score **{score}** ({tier})\n"
+                    f"{result.get('interpretation', '')}",
+                    msg_type="tool_result",
+                    tool_data=result,
+                )
+            else:
+                _val(state, f"No data available for {comp['name']}")
+
+    session = state["sessions_ref"].get(state["session_id"])
+    if session:
+        session["docking_results"] = docking_results
+
+    return {**state, "docking_results": docking_results}
+
+
+async def node_validation(state: LabState) -> LabState:
+    """Validation Agent: design concrete experiments to test hypotheses."""
+    _val(state, "Designing experimental validation plans based on hypotheses, critique, and docking data...")
+
+    plan = await validation_agent.design_validation(
+        state["query"],
+        state.get("hypotheses", []),
+        state.get("entities", []),
+        state.get("critique", {}),
+        state.get("docking_results", []),
+    )
+
+    for vp in plan.get("validation_plans", []):
+        _val(
+            state,
+            f"**{vp.get('experiment_name', 'Experiment')}** (Hypothesis {vp.get('hypothesis_index', '?')})\n"
+            f"Assay: {vp.get('assay_type', '')}\n"
+            f"Model: {vp.get('model_system', '')}\n"
+            f"Readout: {vp.get('readout', '')}\n"
+            f"Expected outcome: *{vp.get('expected_outcome', '')}*\n"
+            f"Feasibility: {vp.get('feasibility', 'medium')} · Timeline: {vp.get('estimated_timeline', 'TBD')}"
+        )
+
+    if plan.get("overall_feasibility"):
+        _val(state, f"**Overall feasibility:** {plan['overall_feasibility']}")
+
+    session = state["sessions_ref"].get(state["session_id"])
+    if session:
+        session["validation_plan"] = plan
+
+    return {**state, "validation_plan": plan}
+
+
 async def node_synthesize(state: LabState) -> LabState:
     """PI Agent: synthesize all findings into a final research brief."""
     _pi(state, "All agents have reported. Synthesizing findings into final research brief...")
+
+    # Enrich critique with graph insights and validation plan for synthesis
+    enriched_critique = dict(state.get("critique", {}))
+    graph_insights = state.get("graph_insights", {})
+    if graph_insights.get("summary"):
+        enriched_critique["graph_analysis"] = graph_insights["summary"]
+    validation_plan = state.get("validation_plan", {})
+    if validation_plan.get("overall_feasibility"):
+        enriched_critique["validation_feasibility"] = validation_plan["overall_feasibility"]
 
     summary = await pi_agent.synthesize(
         state["query"],
         state.get("entities", []),
         state.get("hypotheses", []),
-        state.get("critique", {}),
+        enriched_critique,
         state.get("alphafold_results", []),
     )
 

@@ -327,6 +327,82 @@ async def get_pipeline_jobs() -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Knowledge Graph endpoints
+# ---------------------------------------------------------------------------
+
+from knowledge_graph import knowledge_graph as _kg
+
+
+@app.get("/api/knowledge-graph/stats", tags=["Knowledge Graph"])
+async def kg_stats() -> Dict[str, Any]:
+    """Return node/edge counts and top entity types."""
+    from collections import Counter
+    type_counts: Counter[str] = Counter()
+    for _, data in _kg._graph.nodes(data=True):
+        type_counts[data.get("entity_type", "unknown")] += 1
+
+    return {
+        "node_count": _kg.node_count,
+        "edge_count": _kg.edge_count,
+        "entity_types": dict(type_counts),
+    }
+
+
+@app.get("/api/knowledge-graph/subgraph", tags=["Knowledge Graph"])
+async def kg_subgraph(
+    nodes: str = "",
+    depth: int = 1,
+) -> Dict[str, Any]:
+    """
+    Return a Cytoscape.js-compatible subgraph around the given nodes.
+    ?nodes=BRCA1,TP53&depth=2
+    If nodes is empty, returns the full graph (capped at 500 nodes).
+    """
+    if nodes.strip():
+        node_ids = [n.strip().upper() for n in nodes.split(",") if n.strip()]
+        sub = _kg.subgraph(node_ids, depth=depth)
+    else:
+        sub = _kg  # full graph
+
+    cyto = sub.to_cytoscape_json()
+
+    # Safety cap for the full-graph case
+    if len(cyto["nodes"]) > 500:
+        cyto["nodes"] = cyto["nodes"][:500]
+
+    return {
+        "node_count": len(cyto["nodes"]),
+        "edge_count": len(cyto["edges"]),
+        "elements": cyto,
+    }
+
+
+@app.get("/api/knowledge-graph/contradictions", tags=["Knowledge Graph"])
+async def kg_contradictions() -> List[Dict[str, Any]]:
+    """Return pairs of edges with opposing relationships between the same entities."""
+    raw = _kg.find_contradictions()
+    return [{"edge_a": a, "edge_b": b} for a, b in raw]
+
+
+@app.get("/api/knowledge-graph/underexplored", tags=["Knowledge Graph"])
+async def kg_underexplored(
+    min_sources: int = 2,
+    max_degree: int = 3,
+) -> List[Dict[str, Any]]:
+    """Nodes appearing in multiple studies but with few graph connections."""
+    nodes = _kg.find_underexplored(min_sources=min_sources, max_degree=max_degree)
+    return [
+        {
+            "id": n.id,
+            "entity_type": n.entity_type,
+            "source_count": len(n.source_accessions),
+            "degree": n.metadata.get("degree", 0),
+        }
+        for n in nodes
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Virtual Lab endpoints (multi-agent orchestration)
 # ---------------------------------------------------------------------------
 

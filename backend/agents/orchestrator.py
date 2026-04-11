@@ -271,6 +271,164 @@ Schema:
         )
 
 
+class InsightAgent(BaseAgent):
+    """Analyzes the knowledge graph to surface contradictions and opportunities."""
+
+    _SYSTEM = """\
+You are a knowledge graph analyst in a virtual biology lab.
+Given a set of graph insights (contradictions, underexplored nodes, subgraph data),
+generate a concise scientific interpretation.
+Respond ONLY with valid JSON — no prose before or after.
+
+Schema:
+{
+  "summary": string,
+  "contradictions_interpretation": [string],
+  "research_opportunities": [
+    {"entity": string, "reason": string, "suggested_experiment": string}
+  ],
+  "network_insights": [string]
+}"""
+
+    async def analyze_graph(
+        self,
+        query: str,
+        kg_stats: dict,
+        contradictions: list,
+        underexplored: list,
+        subgraph_entities: list,
+    ) -> Dict[str, Any]:
+        contra_block = "\n".join(
+            f"- {c['edge_a']['source']} → {c['edge_a']['target']} [{c['edge_a']['relationship']}] "
+            f"CONTRADICTS [{c['edge_b']['relationship']}]"
+            for c in contradictions
+        ) or "- No contradictions detected"
+
+        underexp_block = "\n".join(
+            f"- {u['id']} ({u['entity_type']}) — {u['source_count']} sources, degree={u['degree']}"
+            for u in underexplored
+        ) or "- No underexplored nodes"
+
+        entity_block = ", ".join(subgraph_entities[:15]) or "none"
+
+        fallback = {
+            "summary": f"Knowledge graph contains {kg_stats.get('node_count', 0)} entities and {kg_stats.get('edge_count', 0)} relationships.",
+            "contradictions_interpretation": [],
+            "research_opportunities": [],
+            "network_insights": [
+                f"Graph density suggests {'sparse' if kg_stats.get('edge_count', 0) < kg_stats.get('node_count', 0) else 'moderate'} connectivity."
+            ],
+        }
+
+        return (
+            await self._json_chat(
+                f"Research context: {query}\n\n"
+                f"Graph stats: {kg_stats}\n\n"
+                f"Contradictions:\n{contra_block}\n\n"
+                f"Underexplored entities:\n{underexp_block}\n\n"
+                f"Entities in query subgraph: {entity_block}\n\n"
+                f"Analyze these graph insights:",
+                system=self._SYSTEM,
+                fallback=fallback,
+            )
+            or fallback
+        )
+
+
+class ValidationAgent(BaseAgent):
+    """Designs experimental validation plans for hypotheses."""
+
+    _SYSTEM = """\
+You are an experimental biologist in a virtual research lab.
+Design concrete validation experiments for the given hypotheses.
+Include specific assay types, controls, expected outcomes, and feasibility.
+Respond ONLY with valid JSON — no prose before or after.
+
+Schema:
+{
+  "validation_plans": [
+    {
+      "hypothesis_index": int,
+      "experiment_name": string,
+      "assay_type": string,
+      "model_system": string,
+      "controls": {"positive": string, "negative": string},
+      "readout": string,
+      "expected_outcome": string,
+      "feasibility": "high|medium|low",
+      "estimated_timeline": string,
+      "key_reagents": [string]
+    }
+  ],
+  "docking_recommendations": [
+    {"compound": string, "target": string, "rationale": string}
+  ],
+  "overall_feasibility": string
+}"""
+
+    async def design_validation(
+        self,
+        query: str,
+        hypotheses: List[dict],
+        entities: List[dict],
+        critique: Dict[str, Any],
+        docking_results: List[dict],
+    ) -> Dict[str, Any]:
+        hyp_block = "\n".join(
+            f"{i+1}. {h.get('hypothesis', '')}\n   Mechanism: {h.get('mechanism', '')}\n   "
+            f"Approach: {h.get('experimental_approach', 'TBD')}"
+            for i, h in enumerate(hypotheses)
+        ) or "1. No hypotheses."
+
+        entity_block = ", ".join(
+            f"{e.get('name', '')} ({e.get('type', '')})" for e in entities[:8]
+        )
+
+        critique_block = critique.get("overall_verdict", "No critique available")
+
+        docking_block = "\n".join(
+            f"- {d['compound']} → {d['target']}: score={d['overall_score']}, tier={d['tier']}"
+            for d in docking_results
+            if d.get("status") == "predicted"
+        ) or "- No docking data"
+
+        fallback = {
+            "validation_plans": [
+                {
+                    "hypothesis_index": 1,
+                    "experiment_name": "Functional validation assay",
+                    "assay_type": "Cell viability + Western blot",
+                    "model_system": "Relevant cancer cell line",
+                    "controls": {
+                        "positive": "Known pathway activator",
+                        "negative": "Vehicle (DMSO) control",
+                    },
+                    "readout": "Protein expression and cell viability",
+                    "expected_outcome": "Dose-dependent effect on target pathway",
+                    "feasibility": "high",
+                    "estimated_timeline": "2-4 weeks",
+                    "key_reagents": ["Primary antibody", "Cell line", "Compound"],
+                }
+            ],
+            "docking_recommendations": [],
+            "overall_feasibility": "Validation experiments are feasible with standard lab equipment.",
+        }
+
+        return (
+            await self._json_chat(
+                f"Research context: {query}\n\n"
+                f"Hypotheses:\n{hyp_block}\n\n"
+                f"Key entities: {entity_block}\n\n"
+                f"Critic assessment: {critique_block}\n\n"
+                f"Docking predictions:\n{docking_block}\n\n"
+                f"Design validation experiments:",
+                system=self._SYSTEM,
+                fallback=fallback,
+            )
+            or fallback
+        )
+
+
 # ---------------------------------------------------------------------------
 # Module-level agent instances
 # ---------------------------------------------------------------------------
@@ -278,6 +436,8 @@ Schema:
 pi_agent = PIAgent("PI Agent", "orchestrator", "#0F766E", model=_DEFAULT_MODEL)
 hypothesis_agent = HypothesisAgent("Hypothesis Agent", "specialist", "#7C3AED", model=_DEFAULT_MODEL)
 critic_agent = CriticAgent("Critic Agent", "critic", "#D97706", model=_DEFAULT_MODEL)
+insight_agent = InsightAgent("Insight Agent", "analyst", "#2563EB", model=_DEFAULT_MODEL)
+validation_agent = ValidationAgent("Validation Agent", "experimentalist", "#059669", model=_DEFAULT_MODEL)
 
 
 # ---------------------------------------------------------------------------

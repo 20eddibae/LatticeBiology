@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from models import Author, Entity, Link, SLMEntity, SLMExtractionResult, Study
+from models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRelationship, Study
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ _DEFAULT_MODEL = "llama3.2:3b"
 _OLLAMA_HOST = "http://localhost:11434"
 
 _SYSTEM_PROMPT = """\
-You are a biomedical Named Entity Recognition (NER) expert.
+You are a biomedical Named Entity Recognition (NER) and Relation Extraction expert.
 Extract structured information from the biomedical study text provided.
 
 Respond with ONLY valid JSON — no markdown, no code blocks, no explanation.
@@ -55,6 +55,15 @@ Use this exact schema:
       "confidence_score": <float 0.0-1.0>
     }
   ],
+  "relationships": [
+    {
+      "source": "<source entity name>",
+      "target": "<target entity name>",
+      "type": "<exactly one of: activates, inhibits, binds_to, upregulates, downregulates, associated_with>",
+      "confidence": <float 0.0-1.0>,
+      "evidence_snippet": "<short phrase from the text supporting this relationship>"
+    }
+  ],
   "hypothesis": "<1-2 sentence summary of the study's primary biological mechanism>",
   "primary_target": "<the main gene or protein investigated in the study>"
 }
@@ -64,6 +73,9 @@ Rules:
 - Each entity's type MUST be one of: Disease, Gene, Protein, Drug, Pathway.
 - confidence_score must be a number between 0.0 and 1.0.
 - Deduplicate — do not list the same entity twice.
+- For relationships: source and target MUST match entity names listed in the entities array.
+- Only include relationships supported by the text — do not infer beyond what is stated.
+- Relationship type meanings: activates (increases activity), inhibits (decreases activity/blocks), binds_to (physical binding), upregulates (increases expression), downregulates (decreases expression), associated_with (general association).
 - Output raw JSON only. No prose, no markdown fences.\
 """
 
@@ -231,11 +243,15 @@ class BioStreamProcessor:
         study.confidence_score = self.calculate_confidence(study)
         study.processing_status = "complete"
 
+        # 7. Ingest entities + relationships into knowledge graph
+        self._ingest_to_graph(study, extraction)
+
         logger.info(
-            "[%s] Study %s processed — %d entities, confidence=%.2f",
+            "[%s] Study %s processed — %d entities, %d relationships, confidence=%.2f",
             datetime.utcnow().isoformat(),
             accession,
             len(study.entities),
+            len(extraction.relationships),
             study.confidence_score,
         )
         return study
@@ -337,8 +353,16 @@ class BioStreamProcessor:
                 except Exception:
                     pass
 
+            salvaged_rels: List[SLMRelationship] = []
+            for item in data.get("relationships", []):
+                try:
+                    salvaged_rels.append(SLMRelationship(**item))
+                except Exception:
+                    pass
+
             return SLMExtractionResult(
                 entities=salvaged_entities,
+                relationships=salvaged_rels,
                 hypothesis=str(data.get("hypothesis", ""))[:500] or title,
                 primary_target=str(data.get("primary_target", "Unknown"))[:200],
             )
@@ -391,6 +415,62 @@ class BioStreamProcessor:
                 entity.flagged = True
 
         return entities
+
+    # ------------------------------------------------------------------
+    # Knowledge Graph ingestion
+    # ------------------------------------------------------------------
+
+    def _ingest_to_graph(self, study: Study, extraction: SLMExtractionResult) -> None:
+        """Upsert entities and relationships from a processed study into the KG."""
+        from knowledge_graph import KGEdge, KGNode, RelationshipType, knowledge_graph
+
+        accession = study.accession
+
+        # Upsert entity nodes
+        for ent in study.entities:
+            knowledge_graph.add_node(KGNode(
+                id=ent.text.upper(),
+                entity_type=ent.type,
+                aliases=[ent.text],
+                source_accessions=[accession],
+                metadata={"confidence": ent.confidence},
+            ))
+
+        # Build a lookup of entity names -> types for relationship endpoints
+        entity_types = {ent.text.upper(): ent.type for ent in study.entities}
+
+        # Upsert relationship edges
+        for rel in extraction.relationships:
+            try:
+                rel_type = RelationshipType(rel.type)
+            except ValueError:
+                logger.warning("Unknown relationship type %r — skipping", rel.type)
+                continue
+
+            # Ensure both endpoint nodes exist (relationships may reference entities
+            # that failed validation but are still valid graph nodes)
+            for name in (rel.source.upper(), rel.target.upper()):
+                if not knowledge_graph.get_node(name):
+                    knowledge_graph.add_node(KGNode(
+                        id=name,
+                        entity_type=entity_types.get(name, "unknown"),
+                        source_accessions=[accession],
+                    ))
+
+            knowledge_graph.add_edge(KGEdge(
+                source=rel.source.upper(),
+                target=rel.target.upper(),
+                relationship=rel_type,
+                confidence=rel.confidence,
+                evidence=[f"[{accession}] {rel.evidence_snippet}"],
+            ))
+
+        logger.info(
+            "KG updated from %s — nodes=%d, edges=%d",
+            accession,
+            knowledge_graph.node_count,
+            knowledge_graph.edge_count,
+        )
 
     # ------------------------------------------------------------------
     # Confidence scoring

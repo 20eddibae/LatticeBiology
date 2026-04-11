@@ -54,10 +54,10 @@ class KGEdge:
 
 
 class KnowledgeGraph:
-    """In-memory knowledge graph backed by NetworkX DiGraph."""
+    """In-memory knowledge graph backed by NetworkX MultiDiGraph."""
 
     def __init__(self) -> None:
-        self._graph = nx.DiGraph()
+        self._graph = nx.MultiDiGraph()
 
     # ── Mutation ─────────────────────────────────────────────────
 
@@ -82,27 +82,23 @@ class KnowledgeGraph:
             )
 
     def add_edge(self, edge: KGEdge) -> None:
-        """Add or update a directed edge. Merges evidence."""
-        key = (edge.source, edge.target, edge.relationship.value)
-        existing = None
-        for _, _, d in self._graph.edges(data=True):
-            if (d.get("_key") == key):
-                existing = d
-                break
-
-        if existing:
-            ev = set(existing.get("evidence", []))
+        """Add or update a directed edge. Merges evidence on duplicate relationship type."""
+        edge_key = f"{edge.relationship.value}"
+        # Check if this exact relationship already exists between these nodes
+        if self._graph.has_edge(edge.source, edge.target, key=edge_key):
+            d = self._graph[edge.source][edge.target][edge_key]
+            ev = set(d.get("evidence", []))
             ev.update(edge.evidence)
-            existing["evidence"] = list(ev)
-            existing["confidence"] = max(existing.get("confidence", 0), edge.confidence)
+            d["evidence"] = list(ev)
+            d["confidence"] = max(d.get("confidence", 0), edge.confidence)
         else:
             self._graph.add_edge(
                 edge.source,
                 edge.target,
+                key=edge_key,
                 relationship=edge.relationship.value,
                 confidence=edge.confidence,
                 evidence=edge.evidence,
-                _key=key,
             )
 
     # ── Queries ──────────────────────────────────────────────────
@@ -124,13 +120,16 @@ class KnowledgeGraph:
     ) -> List[KGNode]:
         if not self._graph.has_node(node_id):
             return []
+        seen = set()
         result = []
         for _, target, d in self._graph.out_edges(node_id, data=True):
             if rel_type and d.get("relationship") != rel_type.value:
                 continue
-            n = self.get_node(target)
-            if n:
-                result.append(n)
+            if target not in seen:
+                n = self.get_node(target)
+                if n:
+                    result.append(n)
+                    seen.add(target)
         return result
 
     @property
@@ -148,7 +147,7 @@ class KnowledgeGraph:
         contradictions = []
         edges_by_pair: Dict[Tuple[str, str], List[dict]] = {}
 
-        for u, v, d in self._graph.edges(data=True):
+        for u, v, _key, d in self._graph.edges(data=True, keys=True):
             pair = (min(u, v), max(u, v))
             edges_by_pair.setdefault(pair, []).append({
                 "source": u, "target": v, **d
@@ -199,7 +198,7 @@ class KnowledgeGraph:
             })
 
         edges = []
-        for i, (u, v, data) in enumerate(self._graph.edges(data=True)):
+        for i, (u, v, _key, data) in enumerate(self._graph.edges(data=True, keys=True)):
             edges.append({
                 "data": {
                     "id": f"e{i}",
@@ -229,7 +228,7 @@ class KnowledgeGraph:
             n = self.get_node(node_id)
             if n:
                 sub.add_node(n)
-        for u, v, d in self._graph.edges(data=True):
+        for u, v, _key, d in self._graph.edges(data=True, keys=True):
             if u in all_nodes and v in all_nodes:
                 sub.add_edge(KGEdge(
                     source=u, target=v,

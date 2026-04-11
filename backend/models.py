@@ -93,8 +93,21 @@ class SLMEntity(BaseModel):
     confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
+class SLMRelationship(BaseModel):
+    """A directional relationship between two entities extracted by the SLM."""
+    source: str
+    target: str
+    type: Literal[
+        "activates", "inhibits", "binds_to",
+        "upregulates", "downregulates", "associated_with",
+    ]
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence_snippet: str = ""
+
+
 class SLMExtractionResult(BaseModel):
     """Full JSON structure expected from the local SLM."""
     entities: List[SLMEntity]
+    relationships: List[SLMRelationship] = []
     hypothesis: str
     primary_target: str

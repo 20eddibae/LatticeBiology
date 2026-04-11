@@ -25,6 +25,9 @@ langgraph>=0.2.0
 langchain-openai>=0.1.0
 langchain-core>=0.2.0
 
+# SSE streaming
+sse-starlette>=2.0.0
+
 # MCP (Model Context Protocol) server
 mcp>=1.0.0
 
