@@ -230,3 +230,63 @@ async def generate_binding_interface(
         logger.warning("Binding interface prediction failed: %s", exc)
 
     return None
+
+
+async def generate_binding_energy_matrix(
+    protein_a: str,
+    protein_b: str,
+    binding_interface: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Use OpenAI to estimate residue-pair interaction energies based on binding interface data."""
+    if not _openai_client:
+        return None
+
+    residues_a = binding_interface.get("interface_residues_a", [])
+    residues_b = binding_interface.get("interface_residues_b", [])
+
+    if not residues_a or not residues_b:
+        return None
+
+    # Limit to top 8 residues per side for a manageable matrix
+    rows = [f"{r['residue_name']}-{r['residue_index']}" for r in residues_a[:8]]
+    cols = [f"{r['residue_name']}-{r['residue_index']}" for r in residues_b[:8]]
+
+    prompt = (
+        f"You are a structural biologist. Estimate residue-pair interaction energies "
+        f"for the binding interface between {protein_a} and {protein_b}.\n\n"
+        f"Interface residues from {protein_a}: {', '.join(rows)}\n"
+        f"Interface residues from {protein_b}: {', '.join(cols)}\n"
+        f"Hydrogen bonds: {json.dumps(binding_interface.get('hydrogen_bonds', []))}\n\n"
+        f"Return a JSON object with:\n"
+        f'- "rows": list of {protein_a} residue labels (length {len(rows)})\n'
+        f'- "cols": list of {protein_b} residue labels (length {len(cols)})\n'
+        f'- "values": a 2D array [{len(rows)}][{len(cols)}] of estimated interaction energies in kcal/mol '
+        f"(negative = attractive, positive = repulsive, 0 = no interaction)\n"
+        f'- "unit": "kcal/mol"\n'
+        f"Use realistic energy ranges: H-bonds -2 to -5, salt bridges -3 to -7, "
+        f"hydrophobic -0.5 to -2, van der Waals -0.1 to -0.5, clashes +1 to +5."
+    )
+
+    try:
+        resp = await _openai_client.chat.completions.create(
+            model=os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": "You are an expert computational structural biologist. Return only valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=1500,
+            response_format={"type": "json_object"},
+        )
+        text = resp.choices[0].message.content or "{}"
+        data = json.loads(text)
+
+        # Validate structure
+        if "rows" in data and "cols" in data and "values" in data:
+            data.setdefault("unit", "kcal/mol")
+            return data
+
+    except Exception as exc:
+        logger.warning("Binding energy matrix generation failed: %s", exc)
+
+    return None

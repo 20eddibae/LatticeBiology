@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from .base import BaseAgent, _DEFAULT_MODEL
-from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, _openai_client
+from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _openai_client
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class LabState(TypedDict, total=False):
     docking_results: List[dict]
     validation_plan: Dict[str, Any]
     lead_compounds: List[dict]
+    binding_energy_matrix: Dict[str, Any]
     revision_count: int
     final_summary: str
 
@@ -222,6 +223,27 @@ async def node_alphafold(state: LabState) -> LabState:
                 tool_data=interface,
             )
 
+    # Generate binding energy matrix if we have an interface
+    energy_matrix: Dict[str, Any] = {}
+    if binding_interface:
+        _pi(state, "Computing residue-to-residue interaction energy matrix...", msg_type="tool_call")
+        matrix = await generate_binding_energy_matrix(
+            binding_interface.get("protein_a", proteins[0]["name"] if proteins else ""),
+            binding_interface.get("protein_b", proteins[1]["name"] if len(proteins) > 1 else ""),
+            binding_interface,
+        )
+        if matrix:
+            energy_matrix = matrix
+            n_rows = len(matrix.get("rows", []))
+            n_cols = len(matrix.get("cols", []))
+            _pi(
+                state,
+                f"Energy matrix computed: **{n_rows}×{n_cols}** residue pairs\n"
+                f"Unit: {matrix.get('unit', 'kcal/mol')}",
+                msg_type="tool_result",
+                tool_data=matrix,
+            )
+
     # Push to live session
     session = state["sessions_ref"].get(state["session_id"])
     if session:
@@ -230,12 +252,15 @@ async def node_alphafold(state: LabState) -> LabState:
             session["binding_interface"] = binding_interface
         if per_residue_plddt:
             session["per_residue_plddt"] = per_residue_plddt
+        if energy_matrix:
+            session["binding_energy_matrix"] = energy_matrix
 
     return {
         **state,
         "alphafold_results": af_results,
         "binding_interface": binding_interface,
         "per_residue_plddt": per_residue_plddt,
+        "binding_energy_matrix": energy_matrix,
     }
 
 
@@ -775,6 +800,7 @@ async def run_lab_graph(
         "docking_results": [],
         "validation_plan": {},
         "lead_compounds": [],
+        "binding_energy_matrix": {},
         "revision_count": 0,
         "final_summary": "",
         "token_usage": {},
