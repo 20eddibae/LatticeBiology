@@ -39,28 +39,35 @@ export default function MolstarViewer({
     try {
       setStatus("loading");
 
+      // Dynamically import Mol* to avoid SSR issues
       const { createPluginUI } = await import("molstar/lib/mol-plugin-ui");
       const { DefaultPluginUISpec } = await import("molstar/lib/mol-plugin-ui/spec");
 
       if (!containerRef.current) return;
 
+      // Clean up previous plugin
       if (pluginRef.current) {
-        pluginRef.current.dispose();
+        try {
+          pluginRef.current.dispose();
+        } catch {}
         pluginRef.current = null;
       }
 
       containerRef.current.innerHTML = "";
 
-      const { createRoot } = await import("react-dom/client");
-      const renderFn = (component: any, container: Element) => {
-        const root = createRoot(container);
-        root.render(component);
-        return root;
+      // Provide a simple render function
+      const render = (component: any, container: Element) => {
+        if (!container) return;
+        // For simple elements, just append directly
+        if (typeof component === 'object' && component?.$$typeof === undefined) {
+          return;
+        }
+        return component;
       };
 
       const plugin = await createPluginUI({
         target: containerRef.current,
-        render: renderFn,
+        render,
         spec: {
           ...DefaultPluginUISpec(),
           layout: {
@@ -75,27 +82,36 @@ export default function MolstarViewer({
 
       pluginRef.current = plugin;
 
-      const isCif = pdbUrl.endsWith(".cif") || pdbUrl.endsWith(".bcif") || pdbUrl.includes("model-cif");
+      // Determine file format from URL
+      const isBinary = pdbUrl.endsWith(".bcif");
+      const isCif = pdbUrl.includes(".cif") || pdbUrl.includes("model-cif");
+      const format = isCif ? "mmcif" : "pdb";
+
+      // Download structure
       const data = await plugin.builders.data.download(
-        { url: pdbUrl, isBinary: pdbUrl.endsWith(".bcif") },
-        { state: { isGhost: true } }
+        { url: pdbUrl, isBinary },
+        { state: { isGhost: false } }
       );
 
-      const trajectory = await plugin.builders.structure.parseTrajectory(
-        data,
-        isCif ? "mmcif" : "pdb"
-      );
+      // Parse structure
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
 
+      // Apply default visualization
       await plugin.builders.structure.hierarchy.applyPreset(
         trajectory,
         "default",
         { representationPreset: "auto" }
       );
 
-      plugin.canvas3d?.requestCameraReset();
+      // Auto-focus on structure
+      if (plugin.canvas3d) {
+        plugin.canvas3d.requestCameraReset();
+      }
+
       setStatus("ready");
     } catch (err) {
-      console.error("Mol* init error:", err);
+      console.error("Mol* initialization error:", err);
+      console.warn(`Failed to load structure from: ${pdbUrl}`);
       setStatus("error");
     }
   }, [pdbUrl]);

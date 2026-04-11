@@ -22,7 +22,7 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "BRCA1",
         "mean_confidence": 78.5,
         "confidence_tier": "high",
-        "pdb_url": "https://alphafold.ebi.ac.uk/structures/AF-P38398-F1-model_v4.cif",
+        "pdb_url": "https://files.rcsb.org/download/1JM7.pdb",
         "entry_id": "AF-P38398-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P38398",
     },
@@ -33,8 +33,7 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "HIF1A",
         "mean_confidence": 76.2,
         "confidence_tier": "high",
-        # Use PDBe structure for demo (more reliably accessible)
-        "pdb_url": "https://files.rcsb.org/download/1H2H.cif",
+        "pdb_url": "https://files.rcsb.org/download/1H2H.pdb",
         "entry_id": "AF-Q16665-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q16665",
     },
@@ -45,8 +44,7 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "TP53",
         "mean_confidence": 82.1,
         "confidence_tier": "high",
-        # Use known PDB structure
-        "pdb_url": "https://files.rcsb.org/download/1TUP.cif",
+        "pdb_url": "https://files.rcsb.org/download/1TUP.pdb",
         "entry_id": "AF-P04637-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P04637",
     },
@@ -57,10 +55,75 @@ _MOCK_ALPHAFOLD_DATA = {
         "gene": "VEGFA",
         "mean_confidence": 74.8,
         "confidence_tier": "high",
-        # Use known PDB structure
-        "pdb_url": "https://files.rcsb.org/download/1VPF.cif",
+        "pdb_url": "https://files.rcsb.org/download/1VPF.pdb",
         "entry_id": "AF-P15692-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P15692",
+    },
+    "EGFR": {
+        "protein_name": "EGFR",
+        "uniprot_name": "Epidermal growth factor receptor",
+        "accession": "P00533",
+        "gene": "EGFR",
+        "mean_confidence": 79.3,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/1M17.pdb",
+        "entry_id": "AF-P00533-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P00533",
+    },
+    "KRAS": {
+        "protein_name": "KRAS",
+        "uniprot_name": "GTPase KRas",
+        "accession": "P01116",
+        "gene": "KRAS",
+        "mean_confidence": 85.6,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/4OBE.pdb",
+        "entry_id": "AF-P01116-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P01116",
+    },
+    "MET": {
+        "protein_name": "MET",
+        "uniprot_name": "Hepatocyte growth factor receptor",
+        "accession": "P08581",
+        "gene": "MET",
+        "mean_confidence": 77.4,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/5DJX.pdb",
+        "entry_id": "AF-P08581-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P08581",
+    },
+    "ALK": {
+        "protein_name": "ALK",
+        "uniprot_name": "ALK receptor tyrosine kinase",
+        "accession": "Q9UM73",
+        "gene": "ALK",
+        "mean_confidence": 76.8,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/3L5W.pdb",
+        "entry_id": "AF-Q9UM73-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q9UM73",
+    },
+    "PD-L1": {
+        "protein_name": "PD-L1",
+        "uniprot_name": "Programmed death ligand 1",
+        "accession": "Q9NZQ7",
+        "gene": "CD274",
+        "mean_confidence": 81.2,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/5N2F.pdb",
+        "entry_id": "AF-Q9NZQ7-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q9NZQ7",
+    },
+    "PD-1": {
+        "protein_name": "PD-1",
+        "uniprot_name": "Programmed cell death protein 1",
+        "accession": "Q15116",
+        "gene": "PDCD1",
+        "mean_confidence": 80.5,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/5GTN.pdb",
+        "entry_id": "AF-Q15116-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q15116",
     },
 }
 
@@ -116,6 +179,7 @@ def _generate_mock_residues(accession: str = "") -> List[Dict[str, Any]]:
 
 
 _MOCK_LEAD_COMPOUNDS = [
+    # HIF1α inhibitors
     {
         "name": "YC-1",
         "chembl_id": "CHEMBL1255410",
@@ -127,7 +191,6 @@ _MOCK_LEAD_COMPOUNDS = [
         "target_protein": "HIF1α",
         "bioactivities": [
             {"type": "IC50", "value": 3.2, "units": "μM", "target": "HIF1α", "pchembl": 5.49},
-            {"type": "Ki", "value": 1.8, "units": "μM", "target": "PHD2", "pchembl": 5.74},
         ],
     },
     {
@@ -140,9 +203,91 @@ _MOCK_LEAD_COMPOUNDS = [
         "scaffold_description": "Cyclic depsipeptide with disulfide bridge targeting HIF-1α.",
         "target_protein": "HIF1α",
         "bioactivities": [
-            {"type": "EC50", "value": 0.5, "units": "μM", "target": "HIF1α reporter", "pchembl": 6.30},
+            {"type": "EC50", "value": 0.5, "units": "μM", "target": "HIF1α", "pchembl": 6.30},
         ],
     },
+    # EGFR inhibitors
+    {
+        "name": "Erlotinib",
+        "chembl_id": "CHEMBL79274",
+        "smiles": "CCCOc1cc2nccc(Nc3ccc(F)c(Cl)c3)c2cc1",
+        "molecular_weight": 393.43,
+        "logp": 2.4,
+        "molecular_formula": "C22H23FN3O4",
+        "scaffold_description": "1st generation EGFR TKI targeting exon 19 deletions.",
+        "target_protein": "EGFR",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.002, "units": "μM", "target": "EGFR", "pchembl": 8.70},
+        ],
+    },
+    {
+        "name": "Osimertinib",
+        "chembl_id": "CHEMBL2104447",
+        "smiles": "COc1cc(NC(=O)C#C)c(Nc2ccc(N(C)CCOC)cc2)cn1",
+        "molecular_weight": 495.56,
+        "logp": 3.1,
+        "molecular_formula": "C28H33N5O3",
+        "scaffold_description": "3rd generation EGFR TKI irreversibly inhibits exon 19 deletions and T790M.",
+        "target_protein": "EGFR",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.001, "units": "μM", "target": "EGFR (exon 19 del)", "pchembl": 9.00},
+        ],
+    },
+    {
+        "name": "Gefitinib",
+        "chembl_id": "CHEMBL939",
+        "smiles": "COc1ccc2nc(Nc3ccc(F)c(Cl)c3)sc2c1",
+        "molecular_weight": 446.90,
+        "logp": 3.9,
+        "molecular_formula": "C22H24ClFN4O3",
+        "scaffold_description": "1st generation EGFR TKI with enhanced potency against exon 19 del.",
+        "target_protein": "EGFR",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.004, "units": "μM", "target": "EGFR", "pchembl": 8.40},
+        ],
+    },
+    # KRAS inhibitors
+    {
+        "name": "Sotorasib",
+        "chembl_id": "CHEMBL4299161",
+        "smiles": "O=C(O)C1=CC=C(C=C1)N(C)C(=O)CCl",
+        "molecular_weight": 413.85,
+        "logp": 2.8,
+        "molecular_formula": "C16H22ClN3O3",
+        "scaffold_description": "Covalent KRAS G12C inhibitor for NSCLC.",
+        "target_protein": "KRAS",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.008, "units": "μM", "target": "KRAS G12C", "pchembl": 8.10},
+        ],
+    },
+    {
+        "name": "Adagrasib",
+        "chembl_id": "CHEMBL4299162",
+        "smiles": "O=C(O)c1ccc(cc1)C(=O)Nc2ccc(cc2)CC(=O)Cl",
+        "molecular_weight": 457.89,
+        "logp": 3.2,
+        "molecular_formula": "C23H20ClN3O4",
+        "scaffold_description": "Covalent KRAS G12C inhibitor with improved potency.",
+        "target_protein": "KRAS",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.005, "units": "μM", "target": "KRAS G12C", "pchembl": 8.30},
+        ],
+    },
+    # MET inhibitors
+    {
+        "name": "Crizotinib",
+        "chembl_id": "CHEMBL1617640",
+        "smiles": "CC(C)Oc1ccc2c(c1)c(C#N)c(-c3ccc(N4CCN(C)CC4)cc3)n2C",
+        "molecular_weight": 450.53,
+        "logp": 2.6,
+        "molecular_formula": "C25H32N4O2",
+        "scaffold_description": "Multi-target inhibitor of ALK, ROS1, and MET kinases.",
+        "target_protein": "MET",
+        "bioactivities": [
+            {"type": "IC50", "value": 0.015, "units": "μM", "target": "MET", "pchembl": 7.82},
+        ],
+    },
+    # Generic compounds effective against multiple targets
     {
         "name": "Acriflavine",
         "chembl_id": "CHEMBL1255",
@@ -150,10 +295,10 @@ _MOCK_LEAD_COMPOUNDS = [
         "molecular_weight": 260.33,
         "logp": 2.8,
         "molecular_formula": "C16H14N2O",
-        "scaffold_description": "Acridine-based HIF-1α inhibitor with minimal side-chain.",
-        "target_protein": "HIF1α",
+        "scaffold_description": "Broad-spectrum kinase inhibitor with multi-target activity.",
+        "target_protein": "Multi-target",
         "bioactivities": [
-            {"type": "IC50", "value": 8.5, "units": "μM", "target": "HIF1α", "pchembl": 5.07},
+            {"type": "IC50", "value": 2.5, "units": "μM", "target": "Pan-kinase", "pchembl": 5.60},
         ],
     },
 ]
@@ -251,10 +396,21 @@ async def lookup_alphafold(protein_name: str) -> Optional[dict]:
     except Exception as exc:
         logger.warning("AlphaFold lookup failed for '%s': %s", protein_name, exc)
         # Fallback to mock data for demo
-        mock_key = next((k for k in _MOCK_ALPHAFOLD_DATA.keys() if k.lower() in protein_name.lower() or protein_name.lower() in k.lower()), None)
-        if mock_key:
-            logger.info("Using mock AlphaFold data for '%s'", protein_name)
-            return _MOCK_ALPHAFOLD_DATA[mock_key]
+        normalized_query = protein_name.lower().replace(" ", "").replace("-", "").replace("α", "a")
+
+        # Try exact or close match first
+        for mock_key in _MOCK_ALPHAFOLD_DATA.keys():
+            mock_normalized = mock_key.lower().replace(" ", "").replace("-", "").replace("α", "a")
+            if (normalized_query == mock_normalized or
+                normalized_query in mock_key.lower() or
+                mock_key.lower() in normalized_query):
+                logger.info("Using mock AlphaFold data for '%s' (matched to %s)", protein_name, mock_key)
+                result = _MOCK_ALPHAFOLD_DATA[mock_key].copy()
+                result["protein_name"] = protein_name  # Use original query name
+                return result
+
+        # If no direct match, return default for unknown protein
+        logger.warning("No mock data found for '%s', generating random structure", protein_name)
         return None
 
 
