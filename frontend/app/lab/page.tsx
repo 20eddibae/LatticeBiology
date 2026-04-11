@@ -732,25 +732,33 @@ export default function LabPage() {
           )}
 
           <AnimatePresence mode="wait">
-          {viewMode === "dashboard" && session.status === "completed" ? (
-            <motion.div
-              key="dashboard"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="flex-1 overflow-y-auto p-5 bg-slate-50"
-            >
-              <ResultsDashboard
-                alphafoldResults={session.alphafold_results}
-                perResiduePlddt={session.per_residue_plddt ?? {}}
-                bindingInterface={session.binding_interface}
-                bindingEnergyMatrix={session.binding_energy_matrix}
-                leadCompounds={session.lead_compounds ?? []}
-              />
-            </motion.div>
-          ) : (
-          <div key="timeline" className="flex flex-1 min-h-0 gap-0">
+            {viewMode === "dashboard" && session.status === "completed" && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.4, type: "spring", stiffness: 120, damping: 20 }}
+                className="flex-1 overflow-y-auto p-5 bg-slate-50"
+              >
+                <ResultsDashboard
+                  alphafoldResults={session.alphafold_results}
+                  perResiduePlddt={session.per_residue_plddt ?? {}}
+                  bindingInterface={session.binding_interface}
+                  bindingEnergyMatrix={session.binding_energy_matrix}
+                  leadCompounds={session.lead_compounds ?? []}
+                />
+              </motion.div>
+            )}
+            {!(viewMode === "dashboard" && session.status === "completed") && (
+              <motion.div
+                key="timeline"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.4, type: "spring", stiffness: 120, damping: 20 }}
+                className="flex flex-1 min-h-0 gap-0"
+              >
           {/* ── Agent timeline (left) ──────────────────────────────────── */}
           <div
             ref={timelineRef}
@@ -1007,44 +1015,44 @@ export default function LabPage() {
               </div>
             )}
 
-            {/* Agent legend */}
-            <div className="section-panel p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">Agent Legend</p>
-              <div className="space-y-2">
-                {[
-                  { name: "PI Agent",         role: "Orchestrator",    color: "#0F766E", short: "PI",  Icon: Brain      },
-                  { name: "Insight Agent",    role: "Graph analyst",   color: "#2563EB", short: "IN",  Icon: Network    },
-                  { name: "Hypothesis Agent", role: "Specialist",      color: "#7C3AED", short: "HYP", Icon: Lightbulb  },
-                  { name: "Critic Agent",     role: "Peer reviewer",   color: "#D97706", short: "CR",  Icon: ShieldCheck},
-                  { name: "Validation Agent", role: "Experimentalist", color: "#059669", short: "VAL", Icon: TestTubes  },
-                ].map(({ name, role, color, short, Icon }) => (
-                  <div key={name} className="flex items-center gap-2">
-                    <div
-                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-white text-[9px] font-bold"
-                      style={{ backgroundColor: color }}
-                    >
-                      {short}
+              {/* Agent legend */}
+              <div className="section-panel p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">Agent Legend</p>
+                <div className="space-y-2">
+                  {[
+                    { name: "PI Agent",         role: "Orchestrator",    color: "#0F766E", short: "PI",  Icon: Brain      },
+                    { name: "Insight Agent",    role: "Graph analyst",   color: "#2563EB", short: "IN",  Icon: Network    },
+                    { name: "Hypothesis Agent", role: "Specialist",      color: "#7C3AED", short: "HYP", Icon: Lightbulb  },
+                    { name: "Critic Agent",     role: "Peer reviewer",   color: "#D97706", short: "CR",  Icon: ShieldCheck},
+                    { name: "Validation Agent", role: "Experimentalist", color: "#059669", short: "VAL", Icon: TestTubes  },
+                  ].map(({ name, role, color, short, Icon }) => (
+                    <div key={name} className="flex items-center gap-2">
+                      <div
+                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-white text-[9px] font-bold"
+                        style={{ backgroundColor: color }}
+                      >
+                        {short}
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium text-slate-800">{name}</p>
+                        <p className="text-[9px] text-slate-400">{role}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-100 mt-1">
+                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-200">
+                      <Atom size={11} className="text-slate-600" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium text-slate-800">{name}</p>
-                      <p className="text-[9px] text-slate-400">{role}</p>
+                      <p className="text-[11px] font-medium text-slate-800">AlphaFold Tool</p>
+                      <p className="text-[9px] text-slate-400">EBI structural prediction API</p>
                     </div>
-                  </div>
-                ))}
-                <div className="flex items-center gap-2 pt-1 border-t border-slate-100 mt-1">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-200">
-                    <Atom size={11} className="text-slate-600" />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-800">AlphaFold Tool</p>
-                    <p className="text-[9px] text-slate-400">EBI structural prediction API</p>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-          )}
+          </motion.div>
+            )}
           </AnimatePresence>
         </div>
       )}
