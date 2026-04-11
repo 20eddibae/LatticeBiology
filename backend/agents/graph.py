@@ -310,13 +310,70 @@ async def node_critic(state: LabState) -> LabState:
 
 
 async def node_insight(state: LabState) -> LabState:
-    """Insight Agent: analyze the knowledge graph for patterns relevant to the query."""
+    """Insight Agent: analyze the knowledge graph for patterns relevant to the query.
+    Also classifies protein entities into subtypes and looks up Kd for binds_to edges."""
     _insight(state, "Scanning knowledge graph for contradictions, underexplored pathways, and network patterns...")
 
-    from knowledge_graph import knowledge_graph as kg
+    from knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType, ProteinSubtype
+    import os as _os
 
-    # Extract entity names for subgraph query
-    entity_names = [e["name"].upper() for e in state.get("entities", [])]
+    entities = state.get("entities", [])
+    entity_names = [e["name"].upper() for e in entities]
+
+    # ── Classify protein subtypes via OpenAI ──
+    proteins = [e for e in entities if e.get("type") == "protein"]
+    if proteins and _openai_client:
+        protein_names = [p["name"] for p in proteins]
+        try:
+            resp = await _openai_client.chat.completions.create(
+                model=_os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
+                messages=[
+                    {"role": "system", "content": (
+                        "Classify each protein into exactly one subtype. "
+                        "Valid subtypes: transcription_factor, tumor_suppressor, "
+                        "hypoxia_inducible_factor, kinase, receptor, enzyme, structural, signaling, unknown. "
+                        "Return JSON: {\"classifications\": [{\"name\": \"...\", \"subtype\": \"...\"}]}"
+                    )},
+                    {"role": "user", "content": f"Classify these proteins: {', '.join(protein_names)}"},
+                ],
+                temperature=0.0,
+                max_tokens=300,
+                response_format={"type": "json_object"},
+            )
+            import json
+            classifications = json.loads(resp.choices[0].message.content or "{}").get("classifications", [])
+            for cls in classifications:
+                name_upper = cls["name"].upper()
+                subtype_val = cls.get("subtype", "unknown")
+                # Validate subtype
+                try:
+                    ProteinSubtype(subtype_val)
+                except ValueError:
+                    subtype_val = "unknown"
+                # Update the KG node if it exists
+                if kg._graph.has_node(name_upper):
+                    kg._graph.nodes[name_upper]["subtype"] = subtype_val
+                _insight(state, f"Classified **{cls['name']}** as *{subtype_val}*")
+        except Exception as exc:
+            logger.warning("Protein subtype classification failed: %s", exc)
+
+    # ── Look up Kd values for binds_to edges ──
+    try:
+        from clients.chembl import get_chembl_bioactivities
+        for u, v, key, d in list(kg._graph.edges(data=True, keys=True)):
+            if d.get("relationship") == "binds_to" and d.get("kd_value") is None:
+                # Try to find Kd from ChEMBL bioactivities
+                try:
+                    activities = await get_chembl_bioactivities(u, max_results=10)
+                    for act in activities:
+                        if act.get("standard_type") in ("Kd", "KD", "Ki") and act.get("standard_value"):
+                            d["kd_value"] = act["standard_value"]
+                            _insight(state, f"Found Kd for **{u}** → **{v}**: {act['standard_value']} {act.get('standard_units', 'nM')}")
+                            break
+                except Exception:
+                    pass
+    except ImportError:
+        pass
 
     # Gather KG data
     kg_stats = {

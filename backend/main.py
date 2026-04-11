@@ -405,6 +405,44 @@ async def docking_batch(
     return await batch_docking(compound_list, target)
 
 
+@app.get("/api/knowledge-graph/ppi-network", tags=["Knowledge Graph"])
+async def kg_ppi_network(
+    nodes: str = "",
+    depth: int = 1,
+) -> Dict[str, Any]:
+    """
+    Return a protein-protein interaction subgraph with subtypes and Kd values.
+    Filters to only protein/gene nodes and their interconnections.
+    """
+    if nodes.strip():
+        node_ids = [n.strip().upper() for n in nodes.split(",") if n.strip()]
+        sub = _kg.subgraph(node_ids, depth=depth)
+    else:
+        sub = _kg
+
+    cyto = sub.to_cytoscape_json()
+
+    # Filter to protein/gene nodes only
+    protein_ids = set()
+    protein_nodes = []
+    for n in cyto["nodes"]:
+        if n["data"].get("entity_type") in ("protein", "gene"):
+            protein_ids.add(n["data"]["id"])
+            protein_nodes.append(n)
+
+    # Filter edges to only those between proteins
+    ppi_edges = [
+        e for e in cyto["edges"]
+        if e["data"]["source"] in protein_ids and e["data"]["target"] in protein_ids
+    ]
+
+    return {
+        "node_count": len(protein_nodes),
+        "edge_count": len(ppi_edges),
+        "elements": {"nodes": protein_nodes, "edges": ppi_edges},
+    }
+
+
 @app.get("/api/knowledge-graph/underexplored", tags=["Knowledge Graph"])
 async def kg_underexplored(
     min_sources: int = 2,

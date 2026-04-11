@@ -35,10 +35,23 @@ _OPPOSING: Dict[str, str] = {
 }
 
 
+class ProteinSubtype(str, Enum):
+    TRANSCRIPTION_FACTOR = "transcription_factor"
+    TUMOR_SUPPRESSOR = "tumor_suppressor"
+    HYPOXIA_INDUCIBLE_FACTOR = "hypoxia_inducible_factor"
+    KINASE = "kinase"
+    RECEPTOR = "receptor"
+    ENZYME = "enzyme"
+    STRUCTURAL = "structural"
+    SIGNALING = "signaling"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class KGNode:
     id: str
     entity_type: str  # gene, protein, compound, disease, pathway
+    subtype: Optional[str] = None  # ProteinSubtype value for proteins
     aliases: List[str] = field(default_factory=list)
     source_accessions: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -50,6 +63,7 @@ class KGEdge:
     target: str
     relationship: RelationshipType
     confidence: float = 0.5
+    kd_value: Optional[float] = None  # dissociation constant in nM
     evidence: List[str] = field(default_factory=list)
 
 
@@ -72,10 +86,13 @@ class KnowledgeGraph:
             existing_aliases.update(node.aliases)
             data["aliases"] = list(existing_aliases)
             data["metadata"].update(node.metadata)
+            if node.subtype:
+                data["subtype"] = node.subtype
         else:
             self._graph.add_node(
                 node.id,
                 entity_type=node.entity_type,
+                subtype=node.subtype,
                 aliases=node.aliases,
                 source_accessions=node.source_accessions,
                 metadata=node.metadata,
@@ -84,13 +101,14 @@ class KnowledgeGraph:
     def add_edge(self, edge: KGEdge) -> None:
         """Add or update a directed edge. Merges evidence on duplicate relationship type."""
         edge_key = f"{edge.relationship.value}"
-        # Check if this exact relationship already exists between these nodes
         if self._graph.has_edge(edge.source, edge.target, key=edge_key):
             d = self._graph[edge.source][edge.target][edge_key]
             ev = set(d.get("evidence", []))
             ev.update(edge.evidence)
             d["evidence"] = list(ev)
             d["confidence"] = max(d.get("confidence", 0), edge.confidence)
+            if edge.kd_value is not None:
+                d["kd_value"] = edge.kd_value
         else:
             self._graph.add_edge(
                 edge.source,
@@ -98,6 +116,7 @@ class KnowledgeGraph:
                 key=edge_key,
                 relationship=edge.relationship.value,
                 confidence=edge.confidence,
+                kd_value=edge.kd_value,
                 evidence=edge.evidence,
             )
 
@@ -110,6 +129,7 @@ class KnowledgeGraph:
         return KGNode(
             id=node_id,
             entity_type=d.get("entity_type", ""),
+            subtype=d.get("subtype"),
             aliases=d.get("aliases", []),
             source_accessions=d.get("source_accessions", []),
             metadata=d.get("metadata", {}),
@@ -188,26 +208,28 @@ class KnowledgeGraph:
         """Export as Cytoscape.js-compatible elements dict."""
         nodes = []
         for node_id, data in self._graph.nodes(data=True):
-            nodes.append({
-                "data": {
-                    "id": node_id,
-                    "label": node_id,
-                    "entity_type": data.get("entity_type", ""),
-                    "source_count": len(data.get("source_accessions", [])),
-                }
-            })
+            node_data: Dict[str, Any] = {
+                "id": node_id,
+                "label": node_id,
+                "entity_type": data.get("entity_type", ""),
+                "source_count": len(data.get("source_accessions", [])),
+            }
+            if data.get("subtype"):
+                node_data["subtype"] = data["subtype"]
+            nodes.append({"data": node_data})
 
         edges = []
         for i, (u, v, _key, data) in enumerate(self._graph.edges(data=True, keys=True)):
-            edges.append({
-                "data": {
-                    "id": f"e{i}",
-                    "source": u,
-                    "target": v,
-                    "relationship": data.get("relationship", ""),
-                    "confidence": data.get("confidence", 0),
-                }
-            })
+            edge_data: Dict[str, Any] = {
+                "id": f"e{i}",
+                "source": u,
+                "target": v,
+                "relationship": data.get("relationship", ""),
+                "confidence": data.get("confidence", 0),
+            }
+            if data.get("kd_value") is not None:
+                edge_data["kd_value"] = data["kd_value"]
+            edges.append({"data": edge_data})
 
         return {"nodes": nodes, "edges": edges}
 
@@ -234,6 +256,7 @@ class KnowledgeGraph:
                     source=u, target=v,
                     relationship=RelationshipType(d["relationship"]),
                     confidence=d.get("confidence", 0.5),
+                    kd_value=d.get("kd_value"),
                     evidence=d.get("evidence", []),
                 ))
         return sub
