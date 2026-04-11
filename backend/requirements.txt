@@ -1,0 +1,21 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+httpx==0.27.0
+pydantic==2.7.4
+python-dotenv==1.0.1
+python-multipart==0.0.9
+
+# Database — async SQLAlchemy
+# SQLite driver (local dev, zero config)
+sqlalchemy[asyncio]==2.0.31
+aiosqlite==0.20.0
+# Postgres driver (production) — install when DATABASE_URL uses postgresql+asyncpg://
+asyncpg==0.29.0
+
+# Task queue — Celery + Redis
+# Install when REDIS_URL is configured
+celery[redis]==5.4.0
+redis==5.0.7
+
+# Local SLM inference
+ollama==0.3.0

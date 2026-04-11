@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Root variables — light theme ──────────────────────────── */
+:root {
+  --bg-page: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --border: #E2E8F0;
+  --brand: #0F766E;
+  --brand-light: #F0FDFA;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+}
+
+/* ─── Base resets ────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #F1F5F9; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ─── Shimmer skeleton — light ───────────────────────────────── */
+.shimmer {
+  background: linear-gradient(90deg, #F1F5F9 0%, #E9EFF7 50%, #F1F5F9 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ─── Card base ──────────────────────────────────────────────── */
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* ─── Entity highlights — light mode ────────────────────────── */
+.entity-protein {
+  background-color: #F0F9FF;
+  border-bottom: 2px solid #0284C7;
+  color: #0369A1;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.entity-protein:hover { background-color: #BAE6FD; }
+
+.entity-gene {
+  background-color: #F5F3FF;
+  border-bottom: 2px solid #7C3AED;
+  color: #6D28D9;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.entity-gene:hover { background-color: #DDD6FE; }
+
+.entity-compound {
+  background-color: #F0FDF4;
+  border-bottom: 2px solid #16A34A;
+  color: #15803D;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.entity-compound:hover { background-color: #BBF7D0; }
+
+.entity-disease {
+  background-color: #FEF2F2;
+  border-bottom: 2px solid #DC2626;
+  color: #B91C1C;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.entity-disease:hover { background-color: #FECACA; }
+
+.entity-pathway {
+  background-color: #FFFBEB;
+  border-bottom: 2px solid #D97706;
+  color: #B45309;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.entity-pathway:hover { background-color: #FDE68A; }
+
+/* ─── Toast — light ─────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+}
+
+.toast-success { background: #F0FDF4; border-color: #BBF7D0; color: #15803D; }
+.toast-error   { background: #FEF2F2; border-color: #FECACA; color: #B91C1C; }
+
+/* ─── Pipeline flow animation ────────────────────────────────── */
+.flow-line { position: relative; overflow: hidden; }
+.flow-line::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 0;
+  width: 30%; height: 2px;
+  background: linear-gradient(90deg, transparent, #0F766E, transparent);
+  transform: translateY(-50%);
+  animation: flow-pulse 2s linear infinite;
+}
+@keyframes flow-pulse {
+  0%   { left: -30%; }
+  100% { left:  110%; }
+}
+
+/* ─── Monospace data text ────────────────────────────────────── */
+.data-mono {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  font-feature-settings: "liga" 0;
+}
+
+/* ─── Circular progress ring ─────────────────────────────────── */
+.progress-ring { transform: rotate(-90deg); transform-origin: 50% 50%; }
+
+/* ─── Visual hierarchy helpers ───────────────────────────────── */
+
+/* Primary section container — slightly heavier border to separate major sections */
+.section-panel {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;   /* slate-300 — visibly distinct from inner cards */
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Colored left-rail accent on section panels */
+.section-accent-teal   { border-left: 3px solid #0F766E; }
+.section-accent-blue   { border-left: 3px solid #2563EB; }
+.section-accent-violet { border-left: 3px solid #7C3AED; }
+.section-accent-amber  { border-left: 3px solid #D97706; }
+
+/* Agent message bubbles */
+.agent-bubble {
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.65;
+  border: 1px solid;
+}
+.agent-bubble-orchestrator { background: #F0FDFA; border-color: #99F6E4; }
+.agent-bubble-specialist   { background: #F5F3FF; border-color: #DDD6FE; }
+.agent-bubble-critic       { background: #FFFBEB; border-color: #FDE68A; }
+.agent-bubble-final        { background: #F0FDF4; border-color: #86EFAC; }
+.agent-bubble-tool         { background: #F8FAFC; border-color: #CBD5E1; font-family: monospace; font-size: 12px; }
+.agent-bubble-error        { background: #FEF2F2; border-color: #FECACA; }
+
+/* AlphaFold confidence bar colors */
+.conf-high   { background-color: #059669; }
+.conf-medium { background-color: #D97706; }
+.conf-low    { background-color: #DC2626; }

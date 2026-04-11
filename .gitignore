@@ -1,0 +1,20 @@
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+dist/
+build/
+.DS_Store
+
+# Database
+*.db
+*.db-journal
+*.sqlite3
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
