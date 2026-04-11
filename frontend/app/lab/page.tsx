@@ -41,6 +41,7 @@ import {
   type KGSubgraph,
   type BindingInterface,
   type ResidueScore,
+  type LeadCompound,
   fetchKGSubgraph,
 } from "@/lib/api";
 
@@ -76,6 +77,16 @@ const ConfidenceTelemetry = dynamic(() => import("@/components/ConfidenceTelemet
   loading: () => (
     <div className="h-[200px] rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center">
       <p className="text-[11px] text-slate-500">Loading telemetry...</p>
+    </div>
+  ),
+});
+
+// Dynamic import LeadCompoundsPanel
+const LeadCompoundsPanel = dynamic(() => import("@/components/LeadCompoundsPanel"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[200px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <p className="text-[11px] text-slate-400">Loading compounds...</p>
     </div>
   ),
 });
@@ -870,6 +881,13 @@ export default function LabPage() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Lead Compounds */}
+            {session.lead_compounds && session.lead_compounds.length > 0 && (
+              <div className="section-panel p-4 section-accent-teal">
+                <LeadCompoundsPanel compounds={session.lead_compounds} />
               </div>
             )}
 
