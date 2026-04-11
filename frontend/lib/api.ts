@@ -437,8 +437,8 @@ export interface KGSubgraph {
   node_count: number;
   edge_count: number;
   elements: {
-    nodes: Array<{ data: { id: string; label: string; entity_type: string; source_count: number } }>;
-    edges: Array<{ data: { id: string; source: string; target: string; relationship: string; confidence: number } }>;
+    nodes: Array<{ data: { id: string; label: string; entity_type: string; source_count: number; subtype?: string } }>;
+    edges: Array<{ data: { id: string; source: string; target: string; relationship: string; confidence: number; kd_value?: number } }>;
   };
 }
 
@@ -562,6 +562,13 @@ export async function fetchKGSubgraph(nodes: string = "", depth: number = 1): Pr
 
 export async function fetchKGStats(): Promise<{ node_count: number; edge_count: number; entity_types: Record<string, number> } | null> {
   return safeFetch<any>(`${BASE_URL}/api/knowledge-graph/stats`);
+}
+
+export async function fetchPPINetwork(nodes: string = "", depth: number = 1): Promise<KGSubgraph | null> {
+  const params = new URLSearchParams();
+  if (nodes) params.set("nodes", nodes);
+  params.set("depth", String(depth));
+  return safeFetch<KGSubgraph>(`${BASE_URL}/api/knowledge-graph/ppi-network?${params}`);
 }
 
 // ─── Docking API ────────────────────────────────────────────────────────────
