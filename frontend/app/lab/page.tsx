@@ -42,6 +42,7 @@ import {
   type BindingInterface,
   type ResidueScore,
   type LeadCompound,
+  type BindingEnergyMatrix,
   fetchKGSubgraph,
 } from "@/lib/api";
 
@@ -77,6 +78,16 @@ const ConfidenceTelemetry = dynamic(() => import("@/components/ConfidenceTelemet
   loading: () => (
     <div className="h-[200px] rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center">
       <p className="text-[11px] text-slate-500">Loading telemetry...</p>
+    </div>
+  ),
+});
+
+// Dynamic import BindingHeatmap
+const BindingHeatmap = dynamic(() => import("@/components/BindingHeatmap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[300px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <p className="text-[11px] text-slate-400">Loading heatmap...</p>
     </div>
   ),
 });
@@ -888,6 +899,16 @@ export default function LabPage() {
             {session.lead_compounds && session.lead_compounds.length > 0 && (
               <div className="section-panel p-4 section-accent-teal">
                 <LeadCompoundsPanel compounds={session.lead_compounds} />
+              </div>
+            )}
+
+            {/* Binding Energy Heatmap */}
+            {session.binding_energy_matrix && session.binding_energy_matrix.rows && session.binding_energy_matrix.rows.length > 0 && (
+              <div className="section-panel p-4 section-accent-teal">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                  Residue Interaction Energy Map
+                </p>
+                <BindingHeatmap matrix={session.binding_energy_matrix} />
               </div>
             )}
 

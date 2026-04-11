@@ -442,6 +442,13 @@ export interface KGSubgraph {
   };
 }
 
+export interface BindingEnergyMatrix {
+  rows: string[];
+  cols: string[];
+  values: number[][];
+  unit: string;
+}
+
 export interface AgentMessage {
   id: string;
   agent_name: string;
@@ -469,6 +476,7 @@ export interface LabSession {
   binding_interface?: BindingInterface;
   per_residue_plddt?: Record<string, ResidueScore[]>;
   lead_compounds?: LeadCompound[];
+  binding_energy_matrix?: BindingEnergyMatrix;
   graph_insights: GraphInsights;
   hypotheses: string[];
   critique: string;
