@@ -120,9 +120,12 @@ export default function BindingHeatmap({ matrix, className = "" }: BindingHeatma
                   height={cellSize - 2}
                   rx={3}
                   fill={energyToColor(val)}
-                  stroke="#e2e8f0"
-                  strokeWidth={0.5}
-                  className="cursor-pointer transition-opacity hover:opacity-80"
+                  stroke="#94a3b8"
+                  strokeWidth={1}
+                  className="cursor-pointer transition-all hover:stroke-slate-700 hover:stroke-width-2 drop-shadow-sm hover:drop-shadow-md"
+                  style={{
+                    filter: `drop-shadow(0 0 4px rgba(0,0,0,0)) transition(filter 0.2s)`,
+                  }}
                   onMouseEnter={(e) => {
                     const rect = (e.target as SVGRectElement).getBoundingClientRect();
                     const parent = (e.target as SVGRectElement).closest(".relative")?.getBoundingClientRect();

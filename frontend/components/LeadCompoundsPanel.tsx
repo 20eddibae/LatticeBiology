@@ -35,10 +35,11 @@ export default function LeadCompoundsPanel({ compounds }: LeadCompoundsPanelProp
         {compounds.map((comp, i) => (
           <motion.div
             key={comp.chembl_id || comp.name}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1, duration: 0.35 }}
-            className="bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 flex flex-col gap-3"
+            initial={{ opacity: 0, y: 12, x: -8 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            transition={{ delay: i * 0.12, duration: 0.4, type: "spring", stiffness: 80 }}
+            whileHover={{ y: -4, boxShadow: "0 20px 25px rgba(0,0,0,0.2)" }}
+            className="bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 flex flex-col gap-3 transition-all duration-200 cursor-pointer"
           >
             {/* Header */}
             <div className="flex items-start justify-between">
