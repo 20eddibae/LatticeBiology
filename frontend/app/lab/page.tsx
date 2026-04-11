@@ -39,6 +39,8 @@ import {
   type ValidationPlan,
   type GraphInsights,
   type KGSubgraph,
+  type BindingInterface,
+  type ResidueScore,
   fetchKGSubgraph,
 } from "@/lib/api";
 
@@ -64,6 +66,16 @@ const NetworkGraph = dynamic(() => import("@/components/NetworkGraph"), {
         <Network size={20} className="mx-auto text-slate-300 mb-2 animate-pulse" />
         <p className="text-[11px] text-slate-400">Loading network graph…</p>
       </div>
+    </div>
+  ),
+});
+
+// Dynamic import ConfidenceTelemetry
+const ConfidenceTelemetry = dynamic(() => import("@/components/ConfidenceTelemetry"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[200px] rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center">
+      <p className="text-[11px] text-slate-500">Loading telemetry...</p>
     </div>
   ),
 });
@@ -753,9 +765,21 @@ export default function LabPage() {
                         accession={r.accession}
                         alphafoldUrl={r.alphafold_url}
                         height={260}
+                        perResiduePlddt={r.per_residue_plddt}
+                        bindingInterface={session.binding_interface}
                       />
                     ) : (
                       <AlphaFoldCard result={r} />
+                    )}
+                    {/* Per-residue pLDDT telemetry below each viewer */}
+                    {r.per_residue_plddt && r.per_residue_plddt.length > 0 && (
+                      <div className="mt-2">
+                        <ConfidenceTelemetry
+                          residues={r.per_residue_plddt}
+                          proteinName={r.protein_name}
+                          maxHeight={200}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}

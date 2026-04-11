@@ -330,6 +330,55 @@ export { MOCK_PIPELINE_RUNS, MOCK_JOB_QUEUE };
 
 // ─── Virtual Lab types ────────────────────────────────────────────────────────
 
+export interface ResidueScore {
+  residue_index: number;
+  residue_name: string;
+  plddt_score: number;
+}
+
+export interface InterfaceResidue {
+  residue_index: number;
+  residue_name: string;
+  interaction_type: "hydrogen_bond" | "salt_bridge" | "hydrophobic" | "van_der_waals";
+  partner_residue: string;
+}
+
+export interface HydrogenBond {
+  donor: string;
+  acceptor: string;
+  estimated_distance_angstrom: number;
+}
+
+export interface BindingInterface {
+  protein_a: string;
+  protein_b: string;
+  interface_residues_a: InterfaceResidue[];
+  interface_residues_b: InterfaceResidue[];
+  hydrogen_bonds: HydrogenBond[];
+  interface_area_sq_angstrom: number;
+  binding_type: string;
+  confidence: number;
+  description: string;
+}
+
+export interface LeadCompound {
+  name: string;
+  chembl_id: string;
+  smiles: string;
+  molecular_weight: number | null;
+  logp: number | null;
+  molecular_formula: string;
+  scaffold_description: string;
+  target_protein: string;
+  bioactivities: Array<{
+    type: string;
+    value: number | null;
+    units: string;
+    target: string;
+    pchembl: number | null;
+  }>;
+}
+
 export interface AlphaFoldResult {
   protein_name: string;
   uniprot_name: string;
@@ -340,6 +389,7 @@ export interface AlphaFoldResult {
   pdb_url: string;
   entry_id: string;
   alphafold_url: string;
+  per_residue_plddt?: ResidueScore[];
 }
 
 export interface DockingResult {
@@ -416,6 +466,9 @@ export interface LabSession {
   messages: AgentMessage[];
   entities_found: LabEntity[];
   alphafold_results: AlphaFoldResult[];
+  binding_interface?: BindingInterface;
+  per_residue_plddt?: Record<string, ResidueScore[]>;
+  lead_compounds?: LeadCompound[];
   graph_insights: GraphInsights;
   hypotheses: string[];
   critique: string;
