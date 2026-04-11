@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from .base import BaseAgent, _DEFAULT_MODEL
-from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _openai_client
+from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _openai_client, _MOCK_LEAD_COMPOUNDS
 
 logger = logging.getLogger(__name__)
 
@@ -647,6 +647,21 @@ async def node_compound_synthesis(state: LabState) -> LabState:
             msg_type="tool_result",
             tool_data=lead,
         )
+
+    # Fallback: use mock compounds if none found
+    if not lead_compounds:
+        _synth(state, "Using demo compounds for visualization...")
+        lead_compounds = list(_MOCK_LEAD_COMPOUNDS)
+        for comp in lead_compounds:
+            _synth(
+                state,
+                f"**Lead compound: {comp['name']}**\n"
+                f"SMILES: `{comp['smiles'][:60]}{'...' if len(comp['smiles']) > 60 else ''}`\n"
+                f"MW: {comp.get('molecular_weight', 'N/A')} · LogP: {comp.get('logp', 'N/A')}\n"
+                f"Scaffold: *{comp.get('scaffold_description', 'N/A')}*",
+                msg_type="tool_result",
+                tool_data=comp,
+            )
 
     _synth(state, f"Identified **{len(lead_compounds)}** lead compounds for further investigation.")
 
