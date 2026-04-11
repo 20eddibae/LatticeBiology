@@ -288,6 +288,28 @@ export async function fetchJobQueue(): Promise<JobQueueItem[]> {
   return data ?? MOCK_JOB_QUEUE;
 }
 
+export interface DashboardMetrics {
+  studies_indexed: number;
+  entities_extracted: number;
+  pipeline_uptime: number;
+  avg_confidence: number;
+}
+
+export interface TrendingEntity {
+  name: string;
+  type: "protein" | "gene" | "compound" | "disease" | "pathway";
+  count: number;
+}
+
+export async function fetchDashboardMetrics(): Promise<DashboardMetrics | null> {
+  return safeFetch<DashboardMetrics>(`${BASE_URL}/api/dashboard/metrics`);
+}
+
+export async function fetchTrendingEntities(): Promise<TrendingEntity[]> {
+  const data = await safeFetch<TrendingEntity[]>(`${BASE_URL}/api/dashboard/trending`);
+  return data ?? [];
+}
+
 export async function runIngestion(): Promise<{ success: boolean; message: string; runId?: string }> {
   const data = await safeFetch<any>(`${BASE_URL}/api/pipeline/run`, { method: "POST" });
   if (data) {
@@ -368,4 +390,54 @@ export async function fetchLabSession(sessionId: string): Promise<LabSession | n
 export async function fetchLabSessions(): Promise<LabSession[]> {
   const data = await safeFetch<LabSession[]>(`${BASE_URL}/api/lab/sessions`);
   return data ?? [];
+}
+
+/**
+ * Subscribe to SSE stream for a lab session.
+ * Returns a cleanup function to close the connection.
+ */
+export function streamLabSession(
+  sessionId: string,
+  callbacks: {
+    onMessage: (msg: AgentMessage) => void;
+    onStatus: (data: {
+      status: LabSession["status"];
+      entities_found: LabEntity[];
+      alphafold_results: AlphaFoldResult[];
+      hypotheses: string[];
+      critique: string;
+      final_summary: string;
+    }) => void;
+    onDone: (session: LabSession) => void;
+    onError: () => void;
+  },
+): () => void {
+  const url = `${BASE_URL}/api/lab/session/${sessionId}/stream`;
+  const es = new EventSource(url);
+
+  es.addEventListener("message", (e) => {
+    try {
+      callbacks.onMessage(JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.addEventListener("status", (e) => {
+    try {
+      callbacks.onStatus(JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.addEventListener("done", (e) => {
+    try {
+      callbacks.onDone(JSON.parse(e.data));
+    } catch {}
+    es.close();
+  });
+
+  es.onerror = () => {
+    callbacks.onError();
+    es.close();
+  };
+
+  return () => es.close();
 }

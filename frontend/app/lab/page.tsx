@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FlaskConical,
@@ -26,11 +27,25 @@ import clsx from "clsx";
 import {
   startLabSession,
   fetchLabSession,
+  streamLabSession,
   type LabSession,
   type AgentMessage,
   type AlphaFoldResult,
   type LabEntity,
 } from "@/lib/api";
+
+// Dynamic import Mol* viewer (heavy WebGL — avoid SSR)
+const MolstarViewer = dynamic(() => import("@/components/MolstarViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[280px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <div className="text-center">
+        <Atom size={20} className="mx-auto text-slate-300 mb-2 animate-pulse" />
+        <p className="text-[11px] text-slate-400">Loading 3D viewer…</p>
+      </div>
+    </div>
+  ),
+});
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -277,6 +292,106 @@ function EntityList({ entities }: { entities: LabEntity[] }) {
   );
 }
 
+// ─── Agent pipeline graph ────────────────────────────────────────────────────
+
+const PIPELINE_NODES = [
+  { id: "pi_analyze",  label: "PI Analysis",   color: "#0F766E", Icon: Brain      },
+  { id: "alphafold",   label: "AlphaFold",     color: "#0F766E", Icon: Atom       },
+  { id: "hypothesis",  label: "Hypothesis",    color: "#7C3AED", Icon: Lightbulb  },
+  { id: "critic",      label: "Critic Review", color: "#D97706", Icon: ShieldCheck},
+  { id: "synthesize",  label: "Synthesis",     color: "#059669", Icon: Sparkles   },
+];
+
+function PipelineGraph({ activeNode, completed }: { activeNode: string | null; completed: boolean }) {
+  // Determine which nodes are done (everything before activeNode)
+  const activeIdx = activeNode ? PIPELINE_NODES.findIndex((n) => n.id === activeNode) : -1;
+
+  return (
+    <div className="section-panel p-4 section-accent-teal">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
+        Agent Pipeline
+      </p>
+      <div className="space-y-0">
+        {PIPELINE_NODES.map((node, i) => {
+          const isDone = completed || (activeIdx >= 0 && i < activeIdx);
+          const isActive = !completed && node.id === activeNode;
+          const isPending = !completed && (activeIdx < 0 || i > activeIdx);
+          const Icon = node.Icon;
+
+          return (
+            <div key={node.id}>
+              <div className="flex items-center gap-2.5">
+                {/* Node circle */}
+                <div
+                  className={clsx(
+                    "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300",
+                    isDone && "border-emerald-500 bg-emerald-50",
+                    isActive && "border-current bg-white shadow-sm",
+                    isPending && "border-slate-200 bg-slate-50",
+                  )}
+                  style={isActive ? { borderColor: node.color } : undefined}
+                >
+                  {isDone ? (
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                  ) : isActive ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    >
+                      <Loader2 size={10} style={{ color: node.color }} />
+                    </motion.div>
+                  ) : (
+                    <Icon size={10} className="text-slate-300" />
+                  )}
+                </div>
+
+                {/* Label */}
+                <span
+                  className={clsx(
+                    "text-[11px] font-medium transition-colors duration-200",
+                    isDone && "text-emerald-700",
+                    isActive && "text-slate-900 font-semibold",
+                    isPending && "text-slate-400",
+                  )}
+                >
+                  {node.label}
+                </span>
+
+                {isActive && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="ml-auto text-[8px] font-medium uppercase tracking-wider"
+                    style={{ color: node.color }}
+                  >
+                    running
+                  </motion.span>
+                )}
+              </div>
+
+              {/* Connector line */}
+              {i < PIPELINE_NODES.length - 1 && (
+                <div className="ml-[11px] h-3 w-px bg-slate-200" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Critic → Hypothesis revision arrow hint */}
+      {activeNode === "hypothesis" && !completed && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-2 text-[9px] text-violet-500 italic pl-8"
+        >
+          revision loop active
+        </motion.p>
+      )}
+    </div>
+  );
+}
+
 // ─── Virtual Lab page ─────────────────────────────────────────────────────────
 
 export default function LabPage() {
@@ -284,8 +399,9 @@ export default function LabPage() {
   const [session, setSession] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeNode, setActiveNode] = useState<string | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cleanupStreamRef = useRef<(() => void) | null>(null);
 
   // Auto-scroll timeline
   useEffect(() => {
@@ -294,35 +410,71 @@ export default function LabPage() {
     }
   }, [session?.messages.length]);
 
-  // Polling
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
+  // SSE streaming
+  const stopStream = useCallback(() => {
+    if (cleanupStreamRef.current) {
+      cleanupStreamRef.current();
+      cleanupStreamRef.current = null;
     }
   }, []);
 
-  const startPolling = useCallback((sessionId: string) => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      const updated = await fetchLabSession(sessionId);
-      if (updated) {
-        setSession(updated);
-        if (updated.status === "completed" || updated.status === "failed") {
-          stopPolling();
-        }
-      }
-    }, 2000);
-  }, [stopPolling]);
+  const startStream = useCallback((sessionId: string) => {
+    stopStream();
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
+    cleanupStreamRef.current = streamLabSession(sessionId, {
+      onMessage: (msg) => {
+        setSession((prev) => {
+          if (!prev) return prev;
+          // Detect active node from agent role
+          const nodeMap: Record<string, string> = {
+            orchestrator: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "alphafold" : "pi_analyze",
+            specialist: "hypothesis",
+            critic: "critic",
+          };
+          if (msg.message_type === "final") {
+            setActiveNode("synthesize");
+          } else {
+            setActiveNode(nodeMap[msg.agent_role] ?? "pi_analyze");
+          }
+          return { ...prev, messages: [...prev.messages, msg] };
+        });
+      },
+      onStatus: (data) => {
+        setSession((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            status: data.status,
+            entities_found: data.entities_found,
+            alphafold_results: data.alphafold_results,
+            hypotheses: data.hypotheses,
+            critique: data.critique,
+            final_summary: data.final_summary,
+          };
+        });
+      },
+      onDone: (fullSession) => {
+        setSession(fullSession);
+        setActiveNode(null);
+      },
+      onError: () => {
+        // Fallback to single fetch on SSE error
+        fetchLabSession(sessionId).then((s) => {
+          if (s) setSession(s);
+        });
+      },
+    });
+  }, [stopStream]);
+
+  useEffect(() => () => stopStream(), [stopStream]);
 
   const handleRun = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setError(null);
     setSession(null);
-    stopPolling();
+    setActiveNode(null);
+    stopStream();
 
     const result = await startLabSession(query.trim());
     if (!result) {
@@ -346,7 +498,8 @@ export default function LabPage() {
     });
 
     setLoading(false);
-    startPolling(result.session_id);
+    setActiveNode("pi_analyze");
+    startStream(result.session_id);
   };
 
   const isRunning = session?.status === "pending" || session?.status === "running";
@@ -531,6 +684,14 @@ export default function LabPage() {
               )}
             </div>
 
+            {/* Agent Pipeline Graph */}
+            {(isRunning || session.status === "completed") && (
+              <PipelineGraph
+                activeNode={activeNode}
+                completed={session.status === "completed"}
+              />
+            )}
+
             {/* Entities */}
             {session.entities_found.length > 0 && (
               <div className="section-panel p-4 section-accent-blue">
@@ -541,15 +702,25 @@ export default function LabPage() {
               </div>
             )}
 
-            {/* AlphaFold results */}
+            {/* AlphaFold 3D structures (Mol* viewer) */}
             {session.alphafold_results.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3 px-1">
-                  AlphaFold Structures ({session.alphafold_results.length})
+                  3D Structures ({session.alphafold_results.length})
                 </p>
                 {session.alphafold_results.map((r) => (
                   <div key={r.accession} className="mb-3">
-                    <AlphaFoldCard result={r} />
+                    {r.pdb_url ? (
+                      <MolstarViewer
+                        pdbUrl={r.pdb_url}
+                        proteinName={r.protein_name}
+                        accession={r.accession}
+                        alphafoldUrl={r.alphafold_url}
+                        height={260}
+                      />
+                    ) : (
+                      <AlphaFoldCard result={r} />
+                    )}
                   </div>
                 ))}
               </div>

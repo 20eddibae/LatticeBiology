@@ -1,9 +1,9 @@
-fastapi==0.111.0
-uvicorn[standard]==0.30.1
-httpx==0.27.0
-pydantic==2.7.4
-python-dotenv==1.0.1
-python-multipart==0.0.9
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+httpx>=0.28.0
+pydantic>=2.7.0
+python-dotenv>=1.0.1
+python-multipart>=0.0.9
 
 # Database — async SQLAlchemy
 # SQLite driver (local dev, zero config)
@@ -17,5 +17,16 @@ asyncpg==0.29.0
 celery[redis]==5.4.0
 redis==5.0.7
 
-# Local SLM inference
-ollama==0.3.0
+# LLM — OpenAI API (primary)
+openai>=1.35.0
+
+# Agent orchestration — LangGraph (Path B)
+langgraph>=0.2.0
+langchain-openai>=0.1.0
+langchain-core>=0.2.0
+
+# MCP (Model Context Protocol) server
+mcp>=1.0.0
+
+# Local SLM inference (fallback)
+ollama>=0.4.0

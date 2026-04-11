@@ -1,5 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Mol* (Molstar) uses Node.js modules that need to be transpiled
+  transpilePackages: ["molstar"],
+  webpack: (config) => {
+    // Mol* needs these for WebGL shader compilation
+    config.module.rules.push({
+      test: /\.(vert|frag|glsl)$/,
+      type: "asset/source",
+    });
+    return config;
+  },
   async headers() {
     return [
       {

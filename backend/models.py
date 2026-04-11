@@ -89,7 +89,7 @@ class AnnotatedText(CamelModel):
 class SLMEntity(BaseModel):
     """Single entity returned by the local SLM."""
     name: str
-    type: Literal["Disease", "Gene", "Drug", "Pathway"]
+    type: Literal["Disease", "Gene", "Protein", "Drug", "Pathway"]
     confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
 

@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Mol* (Molstar) viewer styles — use pre-built CSS from viewer build */
+
+/* Override Mol* styles to fit our layout */
+.msp-plugin {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+.msp-plugin .msp-layout-static {
+  position: relative !important;
+}
+.msp-plugin .msp-viewport-controls {
+  display: none !important;
+}
+.msp-plugin .msp-btn-link {
+  display: none !important;
+}
+
 /* ─── Root variables — light theme ──────────────────────────── */
 :root {
   --bg-page: #F8FAFC;

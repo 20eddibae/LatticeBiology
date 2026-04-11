@@ -3,6 +3,7 @@ BioStream FastAPI application entry point.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
@@ -11,10 +12,15 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sse_starlette.sse import EventSourceResponse
 
-load_dotenv()
+import pathlib as _pathlib
+# Load .env from project root (one level up from backend/)
+_project_root = _pathlib.Path(__file__).resolve().parent.parent
+load_dotenv(_project_root / ".env")
+load_dotenv()  # also check backend/.env for overrides
 
 logging.basicConfig(
     level=logging.INFO,
@@ -248,6 +254,49 @@ async def get_pipeline_runs() -> List[PipelineRun]:
     return list(reversed(pipeline.runs))
 
 
+@app.get("/api/dashboard/metrics", tags=["Dashboard"])
+async def get_dashboard_metrics() -> Dict[str, Any]:
+    """Aggregated metrics for the dashboard cards."""
+    studies = list(pipeline.studies_cache.values())
+    total_studies = len(studies)
+    total_entities = sum(len(s.entities) for s in studies)
+    avg_confidence = 0.0
+    if studies:
+        scores = [s.confidence_score for s in studies if s.confidence_score > 0]
+        avg_confidence = round(sum(scores) / len(scores) * 100, 1) if scores else 0.0
+
+    # Uptime: percentage of completed runs out of total runs
+    all_runs = pipeline.runs
+    completed = sum(1 for r in all_runs if r.status == "completed")
+    uptime = round(completed / len(all_runs) * 100, 1) if all_runs else 100.0
+
+    return {
+        "studies_indexed": total_studies,
+        "entities_extracted": total_entities,
+        "pipeline_uptime": uptime,
+        "avg_confidence": avg_confidence,
+    }
+
+
+@app.get("/api/dashboard/trending", tags=["Dashboard"])
+async def get_trending_entities() -> List[Dict[str, Any]]:
+    """Top entities across all studies, ranked by occurrence count."""
+    from collections import Counter
+    counts: Counter[tuple[str, str]] = Counter()
+    for study in pipeline.studies_cache.values():
+        for e in study.entities:
+            counts[(e.text, e.type)] += e.mentions
+
+    trending = []
+    for (name, etype), count in counts.most_common(12):
+        trending.append({
+            "name": name,
+            "type": etype,
+            "count": count,
+        })
+    return trending
+
+
 @app.get("/api/pipeline/jobs", tags=["Pipeline"])
 async def get_pipeline_jobs() -> List[Dict[str, Any]]:
     """Return a synthetic job queue derived from recent pipeline runs."""
@@ -294,7 +343,7 @@ async def start_lab_session(
     Start a new multi-agent virtual lab session.
     Returns immediately with a session_id; poll /api/lab/session/{id} for progress.
     """
-    from agents.orchestrator import run_lab_session  # lazy to avoid slow import at startup
+    from agents.graph import run_lab_graph  # LangGraph-based orchestration
 
     query = body.get("query", "").strip()
     if not query:
@@ -317,7 +366,7 @@ async def start_lab_session(
         "completed_at": None,
     }
 
-    background_tasks.add_task(run_lab_session, session_id, query, _lab_sessions)
+    background_tasks.add_task(run_lab_graph, session_id, query, _lab_sessions)
     logger.info("[%s] Lab session %s started for query: %s", now, session_id, query)
     return {"session_id": session_id}
 
@@ -336,6 +385,69 @@ async def list_lab_sessions() -> List[Dict[str, Any]]:
     sessions = list(_lab_sessions.values())
     sessions.sort(key=lambda s: s["created_at"], reverse=True)
     return sessions
+
+
+@app.get("/api/lab/session/{session_id}/stream", tags=["Lab"])
+async def stream_lab_session(session_id: str, request: Request):
+    """
+    SSE stream for a lab session. Yields new agent messages as they appear.
+    Events: 'message' (new agent message), 'status' (session status change),
+    'done' (session completed/failed).
+    """
+    if session_id not in _lab_sessions:
+        raise HTTPException(status_code=404, detail=f"Lab session '{session_id}' not found")
+
+    async def event_generator():
+        seen = 0
+        last_status = None
+        import asyncio as _asyncio
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            session = _lab_sessions.get(session_id)
+            if session is None:
+                break
+
+            current_status = session["status"]
+
+            # Emit new messages
+            messages = session.get("messages", [])
+            if len(messages) > seen:
+                for msg in messages[seen:]:
+                    yield {
+                        "event": "message",
+                        "data": json.dumps(msg),
+                    }
+                seen = len(messages)
+
+            # Emit status changes
+            if current_status != last_status:
+                yield {
+                    "event": "status",
+                    "data": json.dumps({
+                        "status": current_status,
+                        "entities_found": session.get("entities_found", []),
+                        "alphafold_results": session.get("alphafold_results", []),
+                        "hypotheses": session.get("hypotheses", []),
+                        "critique": session.get("critique", ""),
+                        "final_summary": session.get("final_summary", ""),
+                    }),
+                }
+                last_status = current_status
+
+            # Done — send final snapshot and close
+            if current_status in ("completed", "failed"):
+                yield {
+                    "event": "done",
+                    "data": json.dumps(session),
+                }
+                break
+
+            await _asyncio.sleep(0.5)
+
+    return EventSourceResponse(event_generator())
 
 
 # ---------------------------------------------------------------------------

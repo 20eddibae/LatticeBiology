@@ -18,6 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        {/* Mol* (Molstar) pre-built CSS for 3D molecular viewer */}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css" />
+      </head>
       <body className="bg-slate-50 text-slate-900 antialiased">
         <div className="flex h-screen overflow-hidden">
           <Sidebar />

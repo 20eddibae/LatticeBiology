@@ -23,7 +23,15 @@ import MetricCard from "@/components/MetricCard";
 import PipelineHealth from "@/components/PipelineHealth";
 import StudyCard from "@/components/StudyCard";
 import EntityExplorer from "@/components/EntityExplorer";
-import { fetchStudies, runIngestion, type Study } from "@/lib/api";
+import {
+  fetchStudies,
+  runIngestion,
+  fetchDashboardMetrics,
+  fetchTrendingEntities,
+  type Study,
+  type DashboardMetrics,
+  type TrendingEntity,
+} from "@/lib/api";
 import clsx from "clsx";
 
 // ─── Toast notification ───────────────────────────────────────────────────────
@@ -64,17 +72,6 @@ function Toast({ message, type, onDismiss }: ToastProps) {
 
 // ─── Trending entities widget ──────────────────────────────────────────────────
 
-const TRENDING_ENTITIES = [
-  { text: "BRCA1", type: "gene" as const, count: 47, delta: "+12" },
-  { text: "HIF-1α", type: "protein" as const, count: 38, delta: "+8" },
-  { text: "Olaparib", type: "compound" as const, count: 31, delta: "+5" },
-  { text: "triple-negative breast cancer", type: "disease" as const, count: 29, delta: "+7" },
-  { text: "KRAS G12D", type: "gene" as const, count: 26, delta: "+3" },
-  { text: "PI3K/mTOR pathway", type: "pathway" as const, count: 22, delta: "+4" },
-  { text: "Bevacizumab", type: "compound" as const, count: 19, delta: "+2" },
-  { text: "ACE2", type: "protein" as const, count: 18, delta: "+6" },
-];
-
 const ENTITY_ICONS: Record<string, React.ComponentType<LucideProps>> = {
   gene: Dna,
   protein: FlaskConical,
@@ -91,7 +88,9 @@ const ENTITY_STYLES: Record<string, { color: string; bg: string }> = {
   pathway:  { color: "#B45309", bg: "#FFFBEB" },
 };
 
-function TrendingEntities() {
+function TrendingEntities({ entities }: { entities: TrendingEntity[] }) {
+  const maxCount = entities.length > 0 ? entities[0].count : 1;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -104,55 +103,57 @@ function TrendingEntities() {
           <TrendingUp size={15} className="text-brand-600" />
           <h2 className="text-sm font-semibold text-slate-900">Trending Entities</h2>
         </div>
-        <span className="text-[10px] text-slate-400 uppercase tracking-wide">Last 7 days</span>
+        <span className="text-[10px] text-slate-400 uppercase tracking-wide">All studies</span>
       </div>
 
-      <div className="divide-y divide-slate-50">
-        {TRENDING_ENTITIES.map((item, i) => {
-          const Icon = ENTITY_ICONS[item.type];
-          const style = ENTITY_STYLES[item.type];
-          const maxCount = TRENDING_ENTITIES[0].count;
-          const pct = (item.count / maxCount) * 100;
+      {entities.length === 0 ? (
+        <div className="flex items-center justify-center py-8">
+          <p className="text-xs text-slate-400">No entities extracted yet</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-50">
+          {entities.map((item, i) => {
+            const Icon = ENTITY_ICONS[item.type] ?? FlaskConical;
+            const style = ENTITY_STYLES[item.type] ?? ENTITY_STYLES.protein;
+            const pct = (item.count / maxCount) * 100;
 
-          return (
-            <motion.div
-              key={item.text}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
-              className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 transition-colors duration-100"
-            >
-              <span className="text-[11px] text-slate-400 w-4 flex-shrink-0 text-right font-mono">
-                {i + 1}
-              </span>
-              <div
-                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md"
-                style={{ backgroundColor: style.bg }}
+            return (
+              <motion.div
+                key={item.name}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 transition-colors duration-100"
               >
-                <Icon size={11} style={{ color: style.color }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-slate-800 truncate">{item.text}</span>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                    <span className="text-[10px] font-semibold text-emerald-600">{item.delta}</span>
-                    <span className="text-[10px] font-bold text-slate-700 data-mono">{item.count}</span>
+                <span className="text-[11px] text-slate-400 w-4 flex-shrink-0 text-right font-mono">
+                  {i + 1}
+                </span>
+                <div
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md"
+                  style={{ backgroundColor: style.bg }}
+                >
+                  <Icon size={11} style={{ color: style.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-800 truncate">{item.name}</span>
+                    <span className="text-[10px] font-bold text-slate-700 data-mono flex-shrink-0 ml-2">{item.count}</span>
+                  </div>
+                  <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: style.color }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ delay: i * 0.04 + 0.2, duration: 0.5, ease: "easeOut" }}
+                    />
                   </div>
                 </div>
-                <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{ backgroundColor: style.color }}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${pct}%` }}
-                    transition={{ delay: i * 0.04 + 0.2, duration: 0.5, ease: "easeOut" }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -165,6 +166,8 @@ export default function DashboardPage() {
   const [selectedAccession, setSelectedAccession] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [trending, setTrending] = useState<TrendingEntity[]>([]);
 
   const loadStudies = useCallback(async () => {
     setLoading(true);
@@ -178,6 +181,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadStudies();
+    fetchDashboardMetrics().then((m) => { if (m) setMetrics(m); });
+    fetchTrendingEntities().then(setTrending);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -196,38 +201,45 @@ export default function DashboardPage() {
     }
   };
 
+  function fmtCount(n: number): string {
+    if (n >= 10000) return `${(n / 1000).toFixed(1)}K`;
+    if (n >= 1000) return n.toLocaleString();
+    return String(n);
+  }
+
+  const s = metrics;
   const METRIC_CARDS = [
     {
       title: "Studies Indexed",
-      value: "2,847",
-      delta: "+143",
+      value: s ? fmtCount(s.studies_indexed) : "—",
+      delta: "",
       icon: BookMarked,
       color: "teal" as const,
-      sparklineData: [1800, 1950, 2100, 2050, 2200, 2350, 2400, 2500, 2600, 2700, 2800, 2847],
+      sparklineData: s ? [s.studies_indexed] : [],
     },
     {
       title: "Entities Extracted",
-      value: "14.2K",
-      delta: "+8.4%",
+      value: s ? fmtCount(s.entities_extracted) : "—",
+      delta: "",
       icon: Braces,
       color: "blue" as const,
-      sparklineData: [9000, 9800, 10500, 10200, 11000, 11400, 12000, 12800, 13200, 13700, 14000, 14200],
+      sparklineData: s ? [s.entities_extracted] : [],
     },
     {
       title: "Pipeline Uptime",
-      value: "99.7%",
-      delta: "+0.2%",
+      value: s ? `${s.pipeline_uptime}%` : "—",
+      delta: "",
       icon: Activity,
       color: "emerald" as const,
-      sparklineData: [98.5, 99.1, 99.3, 98.9, 99.4, 99.6, 99.5, 99.7, 99.6, 99.8, 99.7, 99.7],
+      sparklineData: s ? [s.pipeline_uptime] : [],
     },
     {
       title: "Avg Confidence",
-      value: "87.3%",
-      delta: "+1.4%",
+      value: s ? `${s.avg_confidence}%` : "—",
+      delta: "",
       icon: BarChart2,
       color: "violet" as const,
-      sparklineData: [83, 84, 85, 84.5, 85.5, 86, 86.5, 87, 86.8, 87.2, 87.1, 87.3],
+      sparklineData: s ? [s.avg_confidence] : [],
     },
   ];
 
@@ -316,7 +328,7 @@ export default function DashboardPage() {
 
         {/* Right column: Trending + Entity Explorer */}
         <div className="xl:flex-[2] min-w-0 flex flex-col gap-5">
-          <TrendingEntities />
+          <TrendingEntities entities={trending} />
 
           {selectedAccession ? (
             <div className="flex-1 min-h-[400px] section-panel section-accent-blue rounded-xl">

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime
@@ -12,19 +13,29 @@ from models import Author, Entity, Link, SLMEntity, SLMExtractionResult, Study
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Optional Ollama import
+# OpenAI configuration (primary) + Ollama fallback
 # ---------------------------------------------------------------------------
 
-try:
-    import ollama  # type: ignore
+_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+_OPENAI_MODEL = os.getenv("OPENAI_NER_MODEL", "gpt-4o-mini")
 
-    _OLLAMA_AVAILABLE = True
-except ImportError:
-    _OLLAMA_AVAILABLE = False
+_openai_client: Optional[Any] = None
+if _OPENAI_API_KEY:
+    try:
+        from openai import AsyncOpenAI
+        _openai_client = AsyncOpenAI(api_key=_OPENAI_API_KEY)
+        logger.info("OpenAI client initialised for NER (model=%s)", _OPENAI_MODEL)
+    except ImportError:
+        logger.warning("openai library not installed — will try Ollama fallback")
 
-# ---------------------------------------------------------------------------
-# Ollama configuration
-# ---------------------------------------------------------------------------
+# Ollama fallback
+_OLLAMA_AVAILABLE = False
+if _openai_client is None:
+    try:
+        import ollama  # type: ignore
+        _OLLAMA_AVAILABLE = True
+    except ImportError:
+        pass
 
 _DEFAULT_MODEL = "llama3.2:3b"
 _OLLAMA_HOST = "http://localhost:11434"
@@ -40,7 +51,7 @@ Use this exact schema:
   "entities": [
     {
       "name": "<entity name exactly as it appears in the text>",
-      "type": "<exactly one of: Disease, Gene, Drug, Pathway>",
+      "type": "<exactly one of: Disease, Gene, Protein, Drug, Pathway>",
       "confidence_score": <float 0.0-1.0>
     }
   ],
@@ -50,7 +61,7 @@ Use this exact schema:
 
 Rules:
 - Only include entities explicitly present in the text.
-- Each entity's type MUST be one of: Disease, Gene, Drug, Pathway.
+- Each entity's type MUST be one of: Disease, Gene, Protein, Drug, Pathway.
 - confidence_score must be a number between 0.0 and 1.0.
 - Deduplicate — do not list the same entity twice.
 - Output raw JSON only. No prose, no markdown fences.\
@@ -60,6 +71,7 @@ Rules:
 _TYPE_MAP: Dict[str, str] = {
     "disease": "disease",
     "gene": "gene",
+    "protein": "protein",
     "drug": "compound",   # maps to existing internal type
     "pathway": "pathway",
 }
@@ -122,24 +134,32 @@ def _extract_json_from_text(raw: str) -> str:
 
 class BioStreamProcessor:
     """
-    Biomedical NER pipeline backed by a local Small Language Model via Ollama.
-    Falls back to an empty extraction when Ollama is unavailable or errors out.
+    Biomedical NER pipeline backed by OpenAI API (primary) with Ollama fallback.
+    Falls back to an empty extraction when neither is available.
     """
 
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
-        self._client: Optional[Any] = None
+        self._openai = _openai_client
+        self._ollama_client: Optional[Any] = None
 
-        if _OLLAMA_AVAILABLE:
-            self._client = ollama.AsyncClient(host=_OLLAMA_HOST)
+        if self._openai:
             logger.info(
-                "[%s] Ollama client initialised (model=%s)",
+                "[%s] BioStreamProcessor using OpenAI (model=%s)",
+                datetime.utcnow().isoformat(),
+                _OPENAI_MODEL,
+            )
+        elif _OLLAMA_AVAILABLE:
+            import ollama
+            self._ollama_client = ollama.AsyncClient(host=_OLLAMA_HOST)
+            logger.info(
+                "[%s] BioStreamProcessor using Ollama fallback (model=%s)",
                 datetime.utcnow().isoformat(),
                 self._model,
             )
         else:
             logger.warning(
-                "[%s] ollama library not installed — extraction will return empty results",
+                "[%s] No LLM backend available — extraction will return empty results",
                 datetime.utcnow().isoformat(),
             )
 
@@ -182,8 +202,8 @@ class BioStreamProcessor:
         s3_key = f"raw/studies/{accession}.json"
         corpus = " ".join(filter(None, [title, abstract]))
 
-        # 2. Single SLM call — entities + hypothesis + primary_target in one shot
-        extraction = await self._ollama_extract(title, abstract or "")
+        # 2. Single LLM call — entities + hypothesis + primary_target in one shot
+        extraction = await self._llm_extract(title, abstract or "")
 
         # 3. Build internal Entity objects (with text-offset snippets)
         entities = self._build_entities(extraction.entities, corpus)
@@ -221,47 +241,67 @@ class BioStreamProcessor:
         return study
 
     # ------------------------------------------------------------------
-    # Ollama extraction
+    # LLM extraction (OpenAI primary, Ollama fallback)
     # ------------------------------------------------------------------
 
-    async def _ollama_extract(self, title: str, abstract: str) -> SLMExtractionResult:
+    async def _llm_extract(self, title: str, abstract: str) -> SLMExtractionResult:
         """
-        Send title + abstract to the local SLM and return a validated
-        SLMExtractionResult.  Returns an empty result on any failure.
+        Send title + abstract to OpenAI (primary) or Ollama (fallback).
+        Returns a validated SLMExtractionResult. Empty result on any failure.
         """
-        if self._client is None:
-            logger.warning(
-                "[%s] No Ollama client available — returning empty extraction",
-                datetime.utcnow().isoformat(),
-            )
-            return self._empty_extraction(title)
-
         user_message = f"Title: {title}\n\nAbstract: {abstract}"
         truncated = user_message[:3000]
 
-        try:
-            response = await self._client.chat(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": truncated},
-                ],
-                options={"temperature": 0},
-            )
-            # Support both attribute-style (ollama >= 0.2) and dict-style access
+        # ── OpenAI path (primary) ──────────────────────────────────────
+        if self._openai:
             try:
-                raw_content: str = response.message.content
-            except AttributeError:
-                raw_content = response["message"]["content"]
-        except Exception as exc:
-            logger.error(
-                "[%s] Ollama request failed: %s",
-                datetime.utcnow().isoformat(),
-                exc,
-            )
-            return self._empty_extraction(title)
+                response = await self._openai.chat.completions.create(
+                    model=_OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": truncated},
+                    ],
+                    temperature=0,
+                    max_tokens=1024,
+                )
+                raw_content = response.choices[0].message.content or ""
+                return self._parse_slm_response(raw_content, title)
+            except Exception as exc:
+                logger.error(
+                    "[%s] OpenAI NER request failed: %s",
+                    datetime.utcnow().isoformat(),
+                    exc,
+                )
+                # Fall through to Ollama if available
 
-        return self._parse_slm_response(raw_content, title)
+        # ── Ollama fallback ────────────────────────────────────────────
+        if self._ollama_client:
+            try:
+                response = await self._ollama_client.chat(
+                    model=self._model,
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": truncated},
+                    ],
+                    options={"temperature": 0},
+                )
+                try:
+                    raw_content = response.message.content
+                except AttributeError:
+                    raw_content = response["message"]["content"]
+                return self._parse_slm_response(raw_content, title)
+            except Exception as exc:
+                logger.error(
+                    "[%s] Ollama NER request failed: %s",
+                    datetime.utcnow().isoformat(),
+                    exc,
+                )
+
+        logger.warning(
+            "[%s] No LLM backend available — returning empty extraction",
+            datetime.utcnow().isoformat(),
+        )
+        return self._empty_extraction(title)
 
     def _parse_slm_response(self, raw: str, title: str) -> SLMExtractionResult:
         """
