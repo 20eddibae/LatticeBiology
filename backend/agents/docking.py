@@ -121,6 +121,21 @@ async def predict_docking(
         tier = "unfavorable"
         interpretation = f"{compound_name} may have poor bioavailability or binding properties for {target_protein}."
 
+    # Estimate energy breakdown from molecular properties
+    hbd = _to_float(compound_props.get("hbd")) or 0
+    hba = _to_float(compound_props.get("hba")) or 0
+    logp = _to_float(compound_props.get("xlogp")) or 0
+    mw = _to_float(compound_props.get("molecular_weight")) or 300
+
+    # Hydrogen bond score: each H-bond donor/acceptor contributes ~-1.5 kcal/mol
+    hydrogen_bond_score = round(-1.5 * min(hbd + hba, 10) * overall, 2)
+    # Hydrophobic score: correlates with LogP
+    hydrophobic_score = round(-0.8 * min(max(logp, 0), 5) * overall, 2)
+    # Electrostatic: rough estimate from polar surface area proxy
+    electrostatic_score = round(-0.5 * min(hba * 0.3 + hbd * 0.4, 3) * overall, 2)
+    # Overall binding energy estimate
+    binding_energy_estimate = round(hydrogen_bond_score + hydrophobic_score + electrostatic_score, 2)
+
     return {
         "compound": compound_name,
         "target": target_protein,
@@ -135,6 +150,12 @@ async def predict_docking(
             "lipinski_compliance": round(lipinski, 3),
             "veber_bioavailability": round(veber, 3),
             "mw_complementarity": round(mw_fit, 3),
+        },
+        "energy_breakdown": {
+            "binding_energy_estimate": binding_energy_estimate,
+            "hydrogen_bond_score": hydrogen_bond_score,
+            "hydrophobic_score": hydrophobic_score,
+            "electrostatic_score": electrostatic_score,
         },
         "properties": {
             "hbd": compound_props.get("hbd"),

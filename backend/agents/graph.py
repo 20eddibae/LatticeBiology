@@ -680,10 +680,26 @@ async def node_synthesize(state: LabState) -> LabState:
 
     _pi(state, f"**Research Brief**\n\n{summary}", msg_type="final")
 
+    # Assemble consolidated visualization_data payload
+    visualization_data: Dict[str, Any] = {
+        "molecule_viewer": {
+            "alphafold_results": state.get("alphafold_results", []),
+            "per_residue_plddt": state.get("per_residue_plddt", {}),
+            "binding_interface": state.get("binding_interface", {}),
+        },
+        "binding_heatmap": state.get("binding_energy_matrix", {}),
+        "smiles_compounds": state.get("lead_compounds", []),
+        "telemetry": {
+            "per_residue_plddt": state.get("per_residue_plddt", {}),
+            "docking_results": state.get("docking_results", []),
+        },
+    }
+
     # Push to live session
     session = state["sessions_ref"].get(state["session_id"])
     if session:
         session["final_summary"] = summary
+        session["visualization_data"] = visualization_data
         session["status"] = "completed"
         session["completed_at"] = _now()
 

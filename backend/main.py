@@ -517,6 +517,28 @@ async def get_lab_session(session_id: str) -> Dict[str, Any]:
     return _lab_sessions[session_id]
 
 
+@app.get("/api/lab/session/{session_id}/visualizations", tags=["Lab"])
+async def get_lab_visualizations(session_id: str) -> Dict[str, Any]:
+    """Return the consolidated visualization payload for a completed lab session."""
+    if session_id not in _lab_sessions:
+        raise HTTPException(status_code=404, detail=f"Lab session '{session_id}' not found")
+
+    session = _lab_sessions[session_id]
+    return session.get("visualization_data", {
+        "molecule_viewer": {
+            "alphafold_results": session.get("alphafold_results", []),
+            "per_residue_plddt": session.get("per_residue_plddt", {}),
+            "binding_interface": session.get("binding_interface", {}),
+        },
+        "binding_heatmap": session.get("binding_energy_matrix", {}),
+        "smiles_compounds": session.get("lead_compounds", []),
+        "telemetry": {
+            "per_residue_plddt": session.get("per_residue_plddt", {}),
+            "docking_results": session.get("docking_results", []),
+        },
+    })
+
+
 @app.get("/api/lab/sessions", tags=["Lab"])
 async def list_lab_sessions() -> List[Dict[str, Any]]:
     """Return all lab sessions, most recent first."""
