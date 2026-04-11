@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from .base import BaseAgent, _DEFAULT_MODEL
-from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface
+from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, _openai_client
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ class LabState(TypedDict, total=False):
     critique: Dict[str, Any]
     docking_results: List[dict]
     validation_plan: Dict[str, Any]
+    lead_compounds: List[dict]
     revision_count: int
     final_summary: str
 
@@ -445,6 +446,135 @@ async def node_validation(state: LabState) -> LabState:
     return {**state, "validation_plan": plan}
 
 
+def _synth(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
+    _push_msg(state, "Synthesis Agent", "specialist", "#6D28D9", content, msg_type, tool_data)
+
+
+async def node_compound_synthesis(state: LabState) -> LabState:
+    """Synthesis node: identify lead small-molecule inhibitors using ChEMBL + PubChem."""
+    import os as _os
+    from clients.chembl import search_chembl_compounds, get_chembl_bioactivities
+    from clients.pubchem import get_compound_properties, get_smiles_from_pubchem
+
+    _synth(state, "Searching for lead small-molecule inhibitors targeting identified proteins...")
+
+    entities = state.get("entities", [])
+    proteins = [e for e in entities if e.get("type") == "protein"][:2]
+
+    if not proteins:
+        _synth(state, "No protein targets identified for compound screening.")
+        return {**state, "lead_compounds": []}
+
+    all_compounds: list[dict] = []
+    for prot in proteins:
+        _synth(state, f"→ ChEMBL search: inhibitors for **{prot['name']}**", msg_type="tool_call")
+        try:
+            hits = await search_chembl_compounds(prot["name"], max_results=5)
+            for hit in hits:
+                if hit.get("smiles"):
+                    hit["target_protein"] = prot["name"]
+                    all_compounds.append(hit)
+        except Exception as exc:
+            logger.warning("ChEMBL search failed for %s: %s", prot["name"], exc)
+
+    if not all_compounds:
+        _synth(state, "No compounds found in ChEMBL. Trying PubChem...")
+        for prot in proteins:
+            try:
+                props = await get_compound_properties(f"{prot['name']} inhibitor")
+                if props and props.get("smiles"):
+                    props["target_protein"] = prot["name"]
+                    props["chembl_id"] = ""
+                    props["pref_name"] = f"{prot['name']} inhibitor"
+                    props["mw_freebase"] = props.get("molecular_weight")
+                    props["alogp"] = props.get("xlogp")
+                    all_compounds.append(props)
+            except Exception:
+                pass
+
+    # Deduplicate by SMILES and take top 3
+    seen_smiles: set[str] = set()
+    unique: list[dict] = []
+    for c in all_compounds:
+        smi = c.get("smiles", "")
+        if smi and smi not in seen_smiles:
+            seen_smiles.add(smi)
+            unique.append(c)
+    candidates = unique[:3]
+
+    # Enrich with bioactivity data and scaffold descriptions
+    lead_compounds: list[dict] = []
+    for comp in candidates:
+        bioactivities: list[dict] = []
+        if comp.get("chembl_id"):
+            try:
+                bioactivities = await get_chembl_bioactivities(comp["chembl_id"], max_results=5)
+            except Exception:
+                pass
+
+        # Get scaffold description from OpenAI
+        scaffold_desc = ""
+        if _openai_client and comp.get("smiles"):
+            try:
+                resp = await _openai_client.chat.completions.create(
+                    model=_os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
+                    messages=[
+                        {"role": "system", "content": "You are a medicinal chemistry expert. Respond with only a brief scaffold description."},
+                        {"role": "user", "content": f"Describe the chemical scaffold of this compound in one sentence (e.g., 'dihydro-pyrazole derivative with a phenyl substituent').\nSMILES: {comp['smiles']}\nName: {comp.get('pref_name', 'unknown')}"},
+                    ],
+                    temperature=0.2,
+                    max_tokens=100,
+                )
+                scaffold_desc = (resp.choices[0].message.content or "").strip()
+            except Exception:
+                scaffold_desc = "Scaffold analysis unavailable"
+
+        lead = {
+            "name": comp.get("pref_name") or comp.get("name", "Unknown"),
+            "chembl_id": comp.get("chembl_id", ""),
+            "smiles": comp.get("smiles", ""),
+            "molecular_weight": comp.get("mw_freebase") or comp.get("molecular_weight"),
+            "logp": comp.get("alogp") or comp.get("xlogp"),
+            "molecular_formula": comp.get("molecular_formula", ""),
+            "scaffold_description": scaffold_desc,
+            "target_protein": comp.get("target_protein", ""),
+            "bioactivities": [
+                {
+                    "type": ba.get("standard_type", ""),
+                    "value": ba.get("standard_value"),
+                    "units": ba.get("standard_units", ""),
+                    "target": ba.get("target_pref_name", ""),
+                    "pchembl": ba.get("pchembl_value"),
+                }
+                for ba in bioactivities[:3]
+            ],
+        }
+        lead_compounds.append(lead)
+
+        mw = lead["molecular_weight"]
+        mw_str = f"{mw:.1f}" if mw else "N/A"
+        logp = lead["logp"]
+        logp_str = f"{logp:.2f}" if logp else "N/A"
+        _synth(
+            state,
+            f"**Lead compound: {lead['name']}**\n"
+            f"SMILES: `{lead['smiles'][:60]}{'...' if len(lead['smiles']) > 60 else ''}`\n"
+            f"MW: {mw_str} · LogP: {logp_str}\n"
+            f"Scaffold: *{scaffold_desc}*\n"
+            f"Target: {lead['target_protein']} · Bioactivities: {len(lead['bioactivities'])}",
+            msg_type="tool_result",
+            tool_data=lead,
+        )
+
+    _synth(state, f"Identified **{len(lead_compounds)}** lead compounds for further investigation.")
+
+    session = state["sessions_ref"].get(state["session_id"])
+    if session:
+        session["lead_compounds"] = lead_compounds
+
+    return {**state, "lead_compounds": lead_compounds}
+
+
 async def node_synthesize(state: LabState) -> LabState:
     """PI Agent: synthesize all findings into a final research brief."""
     _pi(state, "All agents have reported. Synthesizing findings into final research brief...")
@@ -511,7 +641,7 @@ def build_lab_graph() -> Any:
 
     Pipeline:
       pi_analyze → insight → alphafold → hypothesis → critic
-        → (optional revision) → docking → validation → synthesize
+        → (optional revision) → docking → validation → compound_synthesis → synthesize
     """
     graph = StateGraph(LabState)
 
@@ -523,6 +653,7 @@ def build_lab_graph() -> Any:
     graph.add_node("critic", node_critic)
     graph.add_node("docking", node_docking)
     graph.add_node("validation", node_validation)
+    graph.add_node("compound_synthesis", node_compound_synthesis)
     graph.add_node("synthesize", node_synthesize)
 
     # Linear edges
@@ -542,7 +673,8 @@ def build_lab_graph() -> Any:
     )
 
     graph.add_edge("docking", "validation")
-    graph.add_edge("validation", "synthesize")
+    graph.add_edge("validation", "compound_synthesis")
+    graph.add_edge("compound_synthesis", "synthesize")
     graph.add_edge("synthesize", END)
     graph.set_entry_point("pi_analyze")
 
@@ -585,6 +717,7 @@ async def run_lab_graph(
         "critique": {},
         "docking_results": [],
         "validation_plan": {},
+        "lead_compounds": [],
         "revision_count": 0,
         "final_summary": "",
         "token_usage": {},
