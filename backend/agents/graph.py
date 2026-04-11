@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from .base import BaseAgent, _DEFAULT_MODEL
-from .tools import lookup_alphafold
+from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ class LabState(TypedDict, total=False):
     entities: List[dict]
     analysis: Dict[str, Any]
     alphafold_results: List[dict]
+    binding_interface: Dict[str, Any]
+    per_residue_plddt: Dict[str, List[dict]]  # keyed by accession
     graph_insights: Dict[str, Any]
     hypotheses: List[dict]
     key_unknowns: List[str]
@@ -145,15 +147,33 @@ async def node_pi_analyze(state: LabState) -> LabState:
 
 
 async def node_alphafold(state: LabState) -> LabState:
-    """Tool node: look up protein structures via AlphaFold/UniProt API."""
+    """Tool node: look up protein structures via AlphaFold/UniProt API, fetch per-residue pLDDT, and predict binding interface."""
     entities = state.get("entities", [])
     proteins = [e for e in entities if e.get("type") == "protein"][:2]
     af_results: List[dict] = []
+    per_residue_plddt: Dict[str, List[dict]] = {}
 
     for prot in proteins:
         _pi(state, f"→ AlphaFold tool call: **{prot['name']}**", msg_type="tool_call")
         af = await lookup_alphafold(prot["name"])
         if af:
+            # Fetch per-residue pLDDT from the PDB file
+            pdb_url = af.get("pdb_url", "")
+            if pdb_url:
+                _pi(state, f"Fetching per-residue pLDDT scores for **{prot['name']}**...")
+                residues = await fetch_per_residue_plddt(pdb_url)
+                if residues:
+                    af["per_residue_plddt"] = residues
+                    per_residue_plddt[af["accession"]] = residues
+                    high = sum(1 for r in residues if r["plddt_score"] >= 90)
+                    med = sum(1 for r in residues if 70 <= r["plddt_score"] < 90)
+                    low = sum(1 for r in residues if r["plddt_score"] < 70)
+                    _pi(
+                        state,
+                        f"Per-residue pLDDT parsed: **{len(residues)}** residues — "
+                        f"**{high}** high (≥90), **{med}** medium (70-90), **{low}** low (<70)",
+                    )
+
             af_results.append(af)
             tier_label = {"high": "high confidence", "medium": "medium confidence", "low": "low confidence"}.get(
                 af["confidence_tier"], ""
@@ -168,12 +188,54 @@ async def node_alphafold(state: LabState) -> LabState:
         else:
             _pi(state, f"No AlphaFold entry found for **{prot['name']}** in reviewed human proteome.")
 
+    # Predict binding interface if we have 2 proteins
+    binding_interface: Dict[str, Any] = {}
+    if len(af_results) >= 2:
+        prot_a = af_results[0]
+        prot_b = af_results[1]
+        _pi(
+            state,
+            f"Predicting binding interface between **{prot_a['protein_name']}** and **{prot_b['protein_name']}**...",
+            msg_type="tool_call",
+        )
+        interface = await generate_binding_interface(
+            prot_a["protein_name"],
+            prot_b["protein_name"],
+            gene_a=prot_a.get("gene", ""),
+            gene_b=prot_b.get("gene", ""),
+        )
+        if interface:
+            binding_interface = interface
+            n_bonds = len(interface.get("hydrogen_bonds", []))
+            n_res_a = len(interface.get("interface_residues_a", []))
+            n_res_b = len(interface.get("interface_residues_b", []))
+            _pi(
+                state,
+                f"Binding interface predicted: **{n_res_a + n_res_b}** interface residues, "
+                f"**{n_bonds}** hydrogen bonds\n"
+                f"Interface area: **{interface.get('interface_area_sq_angstrom', 0):.0f}** Å²\n"
+                f"Type: {interface.get('binding_type', 'unknown')} · "
+                f"Confidence: {int(interface.get('confidence', 0) * 100)}%\n\n"
+                f"*{interface.get('description', '')}*",
+                msg_type="tool_result",
+                tool_data=interface,
+            )
+
     # Push to live session
     session = state["sessions_ref"].get(state["session_id"])
     if session:
         session["alphafold_results"] = af_results
+        if binding_interface:
+            session["binding_interface"] = binding_interface
+        if per_residue_plddt:
+            session["per_residue_plddt"] = per_residue_plddt
 
-    return {**state, "alphafold_results": af_results}
+    return {
+        **state,
+        "alphafold_results": af_results,
+        "binding_interface": binding_interface,
+        "per_residue_plddt": per_residue_plddt,
+    }
 
 
 async def node_hypothesis(state: LabState) -> LabState:
@@ -515,6 +577,8 @@ async def run_lab_graph(
         "entities": [],
         "analysis": {},
         "alphafold_results": [],
+        "binding_interface": {},
+        "per_residue_plddt": {},
         "graph_insights": {},
         "hypotheses": [],
         "key_unknowns": [],
