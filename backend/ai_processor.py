@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRelationship, Study
+from .models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRelationship, Study
 
 logger = logging.getLogger(__name__)
 
