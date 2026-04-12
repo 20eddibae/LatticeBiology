@@ -224,7 +224,24 @@ class BioStreamProcessor:
         # 3. Build internal Entity objects (with text-offset snippets)
         entities = self._build_entities(extraction.entities, corpus)
 
-        # 4. Assemble Study
+        # 4. Convert relationships to internal model
+        from .models import Relationship
+        relationships = []
+        entity_names = {e.text for e in entities}  # For validation
+        for rel in extraction.relationships:
+            if rel.source in entity_names and rel.target in entity_names:
+                relationships.append(
+                    Relationship(
+                        source_entity=rel.source,
+                        target_entity=rel.target,
+                        relationship_type=rel.type,
+                        confidence=rel.confidence,
+                        evidence_snippet=rel.evidence_snippet,
+                        source_count=1,
+                    )
+                )
+
+        # 5. Assemble Study
         study = Study(
             accession=accession,
             title=title,
@@ -235,19 +252,20 @@ class BioStreamProcessor:
             hypothesis=extraction.hypothesis,
             primary_target=extraction.primary_target,
             entities=entities,
+            relationships=relationships,
             s3_key=s3_key,
             processing_status="processing",
         )
 
-        # 5. Validation layer — flag entities absent from title/links
+        # 6. Validation layer — flag entities absent from title/links
         metadata = {"title": title, "links": [lnk.url for lnk in links]}
         study.entities = self.validate_entities(study.entities, metadata)
 
-        # 6. Overall confidence score
+        # 7. Overall confidence score
         study.confidence_score = self.calculate_confidence(study)
         study.processing_status = "complete"
 
-        # 7. Ingest entities + relationships into knowledge graph
+        # 8. Ingest entities + relationships into knowledge graph
         self._ingest_to_graph(study, extraction)
 
         logger.info(

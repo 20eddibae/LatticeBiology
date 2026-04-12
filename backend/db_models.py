@@ -24,10 +24,14 @@ class StudyRow(Base):
     confidence_score = Column(Float, default=0.0)
     s3_key = Column(String, nullable=True)
     processing_status = Column(String, default="pending")
+    # Deep linking
+    source_url = Column(String, nullable=True)  # EBI BioStudies or PubMed URL
+    pmid = Column(String, nullable=True)  # PubMed ID
     # Nested objects stored as JSON — avoids extra join tables for a document-oriented model
     authors = Column(JSON, default=list)
     links = Column(JSON, default=list)
     entities = Column(JSON, default=list)
+    relationships = Column(JSON, default=list)  # Relationship objects
 
 
 class PipelineRunRow(Base):

@@ -1,5 +1,25 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export interface Relationship {
+  sourceEntity: string;
+  targetEntity: string;
+  relationshipType: "activates" | "inhibits" | "binds_to" | "upregulates" | "downregulates" | "associated_with";
+  confidence: number;
+  evidenceSnippet?: string;
+  sourceCount?: number;
+}
+
+export interface Author {
+  name: string;
+  affiliation?: string;
+}
+
+export interface Link {
+  url: string;
+  type: string;
+  description?: string;
+}
+
 export interface Study {
   accession: string;
   title: string;
@@ -13,6 +33,13 @@ export interface Study {
   };
   primaryTarget?: string;
   abstract?: string;
+  hypothesis?: string;
+  entities?: Entity[];
+  relationships?: Relationship[];
+  authors?: Author[];
+  links?: Link[];
+  sourceUrl?: string;  // Deep link to EBI BioStudies
+  pmid?: string;  // PubMed ID
 }
 
 export interface Entity {
@@ -69,6 +96,8 @@ export interface JobQueueItem {
 
 function mapStudy(raw: any): Study {
   const entities: any[] = raw.entities ?? [];
+  const relationships: any[] = raw.relationships ?? [];
+
   return {
     accession: raw.accession,
     title: raw.title,
@@ -82,6 +111,20 @@ function mapStudy(raw: any): Study {
     },
     primaryTarget: raw.primaryTarget ?? raw.primary_target,
     abstract: raw.abstract,
+    hypothesis: raw.hypothesis,
+    entities: entities.map(mapEntity),
+    relationships: relationships.map((r: any) => ({
+      sourceEntity: r.sourceEntity ?? r.source_entity,
+      targetEntity: r.targetEntity ?? r.target_entity,
+      relationshipType: r.relationshipType ?? r.relationship_type,
+      confidence: r.confidence ?? 0.5,
+      evidenceSnippet: r.evidenceSnippet ?? r.evidence_snippet,
+      sourceCount: r.sourceCount ?? r.source_count ?? 1,
+    })),
+    authors: raw.authors ?? [],
+    links: raw.links ?? [],
+    sourceUrl: raw.sourceUrl ?? raw.source_url,
+    pmid: raw.pmid,
   };
 }
 

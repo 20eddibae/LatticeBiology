@@ -27,14 +27,13 @@ if _GROQ_API_KEY:
     except ImportError:
         logger.warning("openai library not installed — agents will use Ollama fallback")
 
-# Ollama fallback
+# Ollama fallback — always check, even if Groq is available (for runtime failures)
 _OLLAMA_AVAILABLE = False
-if _llm_client is None:
-    try:
-        import ollama  # type: ignore  # noqa: F401
-        _OLLAMA_AVAILABLE = True
-    except ImportError:
-        pass
+try:
+    import ollama  # type: ignore  # noqa: F401
+    _OLLAMA_AVAILABLE = True
+except ImportError:
+    pass
 
 
 class BaseAgent:
@@ -64,25 +63,22 @@ class BaseAgent:
             {"role": "user", "content": user},
         ]
 
-        # ── Groq path (primary) with rate-limit retry ────────────────
+        # ── Groq path (primary) with fallback on rate limit ────────────────
         if _llm_client:
-            for attempt in range(3):
-                try:
-                    response = await _llm_client.chat.completions.create(
-                        model=self.model,
-                        messages=messages,
-                        temperature=0.3,
-                        max_tokens=2048,
-                    )
-                    return (response.choices[0].message.content or "").strip()
-                except Exception as exc:
-                    if "429" in str(exc) or "rate" in str(exc).lower():
-                        wait = 2 ** attempt + 1
-                        logger.info("[%s] Rate limited, retrying in %ds...", self.name, wait)
-                        await asyncio.sleep(wait)
-                        continue
+            try:
+                response = await _llm_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=2048,
+                )
+                return (response.choices[0].message.content or "").strip()
+            except Exception as exc:
+                if "429" in str(exc) or "rate" in str(exc).lower():
+                    logger.info("[%s] Groq API rate limited, falling back to Ollama", self.name)
+                    # Fall through to Ollama immediately instead of retrying
+                else:
                     logger.warning("[%s] Groq LLM call failed: %s", self.name, exc)
-                    break  # Fall through to Ollama
 
         # ── Ollama fallback ────────────────────────────────────────────
         if _OLLAMA_AVAILABLE:
@@ -90,7 +86,7 @@ class BaseAgent:
                 import ollama
                 client = ollama.AsyncClient()
                 response = await client.chat(
-                    model="llama3.2:3b",
+                    model="llama3.2:latest",
                     messages=messages,
                 )
                 return response.message.content.strip()

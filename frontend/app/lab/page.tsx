@@ -113,6 +113,28 @@ const LeadCompoundsPanel = dynamic(() => import("@/components/LeadCompoundsPanel
   ),
 });
 
+// Dynamic import new interactive components
+const ResearchLoadingAnimation = dynamic(() => import("@/components/ResearchLoadingAnimation"), {
+  ssr: false,
+});
+
+const InteractiveResultsViewer = dynamic(() => import("@/components/InteractiveResultsViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <p className="text-[11px] text-slate-400">Loading results viewer...</p>
+    </div>
+  ),
+});
+
+const HypothesisRefinementTool = dynamic(() => import("@/components/HypothesisRefinementTool"), {
+  ssr: false,
+});
+
+const AgentCollaborationBoard = dynamic(() => import("@/components/AgentCollaborationBoard"), {
+  ssr: false,
+});
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EXAMPLE_QUERIES = [
@@ -852,8 +874,11 @@ export default function LabPage() {
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
   const [kgData, setKgData] = useState<KGSubgraph | null>(null);
+  const [loadingStage, setLoadingStage] = useState<"initializing" | "extracting" | "predicting" | "analyzing" | "synthesizing">("initializing");
+  const [smoothProgress, setSmoothProgress] = useState(20);
   const timelineRef = useRef<HTMLDivElement>(null);
   const cleanupStreamRef = useRef<(() => void) | null>(null);
+  const stageChangeTimeRef = useRef<number>(Date.now());
 
   // Auto-scroll timeline
   useEffect(() => {
@@ -922,6 +947,21 @@ export default function LabPage() {
             final_summary: data.final_summary,
           };
         });
+
+        // Update loading stage based on progress
+        if (data.entities_found && data.entities_found.length > 0) {
+          setLoadingStage("extracting");
+        }
+        if (data.alphafold_results && data.alphafold_results.length > 0) {
+          setLoadingStage("predicting");
+        }
+        if (data.hypotheses && data.hypotheses.length > 0) {
+          setLoadingStage("analyzing");
+        }
+        if (data.final_summary) {
+          setLoadingStage("synthesizing");
+        }
+
         // Refetch KG on status updates
         setKgData(null);
       },
@@ -979,70 +1019,51 @@ export default function LabPage() {
   const isRunning = session?.status === "pending" || session?.status === "running";
   const showDecisionNode = session?.critique && activeNode === "critic";
 
+  // Continuous progress animation
+  useEffect(() => {
+    if (!isRunning) return;
+
+    const stageToMaxProgress = {
+      initializing: 15,
+      extracting: 35,
+      predicting: 55,
+      analyzing: 75,
+      synthesizing: 95,
+    };
+
+    const maxForStage = stageToMaxProgress[loadingStage];
+
+    const interval = setInterval(() => {
+      setSmoothProgress((prev) => {
+        const newVal = prev + 0.5;
+        return Math.min(newVal, maxForStage);
+      });
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [isRunning, loadingStage]);
+
+  // Track stage changes
+  useEffect(() => {
+    stageChangeTimeRef.current = Date.now();
+  }, [loadingStage]);
+
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#F8FAFC]">
-      {/* ── Compact header ─────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="flex flex-col h-full overflow-hidden bg-gradient-to-br from-white via-slate-50 to-blue-50">
+      {/* ── Minimal top header ─────────────────────────────────────────── */}
+      <div className="flex-shrink-0 border-b border-slate-200 bg-white/80 backdrop-blur-sm px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 border border-teal-200">
-              <FlaskConical size={14} className="text-teal-600" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-slate-800">Virtual Research Lab</h1>
-              <p className="text-[9px] text-slate-400">
-                PI → Insight → AlphaFold → Hypothesis → Critic → Docking → Validation → Synthesis
-              </p>
-            </div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 border border-teal-200">
+            <FlaskConical size={16} className="text-teal-600" />
           </div>
-
-          {/* Query input (inline) */}
-          <div className="flex-1 flex gap-2 ml-4">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !isRunning && !loading && handleRun()}
-              placeholder="Describe your research question…"
-              disabled={isRunning || loading}
-              className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] text-slate-800 placeholder-slate-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/30 disabled:opacity-50 transition-colors"
-            />
-            <motion.button
-              onClick={handleRun}
-              disabled={!query.trim() || isRunning || loading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-teal-700 disabled:opacity-40 transition-colors shadow-sm"
-            >
-              {loading || isRunning ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Play size={12} fill="currentColor" />
-              )}
-              {isRunning ? "Running…" : "Run"}
-            </motion.button>
+          <div>
+            <h1 className="text-sm font-bold text-slate-800">Virtual Research Lab</h1>
           </div>
-
-          {session && (
-            <div className="flex-shrink-0">
-              <StatusBadge status={session.status} />
-            </div>
-          )}
         </div>
 
-        {/* Example queries (only when no session) */}
-        {!session && (
-          <div className="mt-2 flex flex-wrap gap-1.5 ml-[52px]">
-            {EXAMPLE_QUERIES.map((q) => (
-              <button
-                key={q}
-                onClick={() => setQuery(q)}
-                disabled={isRunning || loading}
-                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-500 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 transition-all disabled:opacity-40"
-              >
-                {q.length > 60 ? q.slice(0, 60) + "…" : q}
-              </button>
-            ))}
+        {session && (
+          <div className="flex-shrink-0">
+            <StatusBadge status={session.status} />
           </div>
         )}
       </div>
@@ -1054,7 +1075,7 @@ export default function LabPage() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mx-4 mt-2 flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-[12px] text-red-700"
+            className="mx-6 mt-3 flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-[12px] text-red-700"
           >
             <XCircle size={13} className="flex-shrink-0" />
             {error}
@@ -1064,51 +1085,407 @@ export default function LabPage() {
 
       {/* ── Main workspace ─────────────────────────────────────────── */}
       {!session ? (
-        /* Empty state — light theme */
+        /* Empty state — floating search bar in center */
         <div className="flex flex-1 items-center justify-center p-8">
-          <div className="text-center max-w-lg">
-            <div className="flex justify-center mb-5">
-              <div className="relative">
-                <motion.div
-                  className="absolute -inset-4 rounded-full border border-dashed border-teal-300/60"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                />
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 border border-teal-200">
-                  <Brain size={28} className="text-teal-600" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="w-full max-w-2xl"
+          >
+            {/* Main search card */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+              <div className="p-8">
+                {/* Title */}
+                <h2 className="text-3xl font-bold text-slate-900 mb-2 text-center">Research Question</h2>
+                <p className="text-center text-slate-500 text-sm mb-8">
+                  Describe what you want to investigate
+                </p>
+
+                {/* Search input */}
+                <div className="flex gap-3 mb-6">
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !isRunning && !loading && handleRun()}
+                    placeholder="e.g., BRCA1-TP53 interactions in breast cancer…"
+                    disabled={isRunning || loading}
+                    autoFocus
+                    className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:opacity-50 transition-colors"
+                  />
+                  <motion.button
+                    onClick={handleRun}
+                    disabled={!query.trim() || isRunning || loading}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2 rounded-lg bg-teal-600 px-6 py-3 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-40 transition-colors shadow-md hover:shadow-lg"
+                  >
+                    {loading || isRunning ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Play size={16} fill="currentColor" />
+                    )}
+                    {isRunning ? "Running" : "Launch"}
+                  </motion.button>
+                </div>
+
+                {/* Example queries */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Examples</p>
+                  <div className="space-y-2">
+                    {EXAMPLE_QUERIES.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => setQuery(q)}
+                        disabled={isRunning || loading}
+                        className="w-full text-left rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 transition-all disabled:opacity-40"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom agent row */}
+              <div className="border-t border-slate-100 bg-slate-50/50 px-8 py-6">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Research Team</p>
+                <div className="grid grid-cols-5 gap-3">
+                  {[
+                    { label: "PI", desc: "Orchestrator", Icon: Brain },
+                    { label: "Insight", desc: "Analysis", Icon: Network },
+                    { label: "Hypothesis", desc: "Theory", Icon: Lightbulb },
+                    { label: "Critic", desc: "Review", Icon: ShieldCheck },
+                    { label: "Validation", desc: "Testing", Icon: TestTubes },
+                  ].map(({ label, desc, Icon }) => (
+                    <div key={label} className="rounded-lg border border-slate-200 bg-white p-2.5 text-center text-[10px]">
+                      <div className="mx-auto mb-1.5 flex h-5 w-5 items-center justify-center">
+                        <Icon size={14} className="text-slate-400 stroke-[1.5]" />
+                      </div>
+                      <p className="font-medium text-slate-700">{label}</p>
+                      <p className="text-slate-400">{desc}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-            <h2 className="text-lg font-bold text-slate-800 mb-2">Virtual Wet Lab Workbench</h2>
-            <p className="text-[13px] text-slate-500 leading-relaxed mb-6">
-              Enter a research question to launch the multi-agent pipeline. AI agents will analyze your query,
-              predict protein structures, generate hypotheses, and identify drug candidates — all in real time.
-            </p>
-            <div className="grid grid-cols-5 gap-3">
-              {[
-                { label: "PI", desc: "Orchestrator", color: "#0F766E", Icon: Brain },
-                { label: "Insight", desc: "Graph Analysis", color: "#2563EB", Icon: Network },
-                { label: "Hypothesis", desc: "Generation", color: "#7C3AED", Icon: Lightbulb },
-                { label: "Critic", desc: "Peer Review", color: "#D97706", Icon: ShieldCheck },
-                { label: "Validation", desc: "Experiments", color: "#059669", Icon: TestTubes },
-              ].map(({ label, desc, color, Icon }) => (
-                <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-                  <div
-                    className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full text-white text-xs font-bold"
-                    style={{ backgroundColor: color }}
-                  >
-                    <Icon size={14} />
-                  </div>
-                  <p className="text-[11px] font-medium text-slate-700">{label}</p>
-                  <p className="text-[9px] text-slate-400">{desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          </motion.div>
         </div>
+      ) : session?.status === "completed" ? (
+        /* ── Post-Research Interactive Section ──────────────────────── */
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-br from-slate-50 to-blue-50 p-6"
+        >
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <h2 className="text-2xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-purple-600" />
+                Research Complete
+              </h2>
+              <p className="text-slate-600">Explore findings, refine hypotheses, and collaborate with research agents</p>
+            </motion.div>
+
+            {/* Featured Hypothesis Card */}
+            {session.hypotheses && session.hypotheses.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <div className="bg-white rounded-lg border-2 border-purple-200 p-6 shadow-sm overflow-hidden">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-purple-600 mb-1">Top Finding</p>
+                      <h3 className="text-lg font-bold text-slate-900">Primary Hypothesis</h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-purple-600">
+                        {Math.round(0.75 * 100)}%
+                      </p>
+                      <p className="text-xs text-slate-500">confidence</p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-4">
+                    {typeof session.hypotheses[0] === "string"
+                      ? session.hypotheses[0]
+                      : (session.hypotheses[0] as any)?.hypothesis || ""}
+                  </p>
+
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all"
+                    >
+                      Refine Hypothesis
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-50 transition-all"
+                    >
+                      View Details
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Secondary Hypotheses List */}
+            {session.hypotheses && session.hypotheses.length > 1 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.45 }}
+              >
+                <div className="bg-white rounded-lg border border-slate-200 p-4 overflow-hidden">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                    Additional Hypotheses ({session.hypotheses.length - 1})
+                  </p>
+                  <div className="space-y-2">
+                    {session.hypotheses.slice(1).map((hyp, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.5 + idx * 0.05 }}
+                        className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-slate-100"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">
+                            {typeof hyp === "string" ? hyp.slice(0, 60) + "..." : (hyp as any)?.hypothesis?.slice(0, 60) + "..."}
+                          </p>
+                        </div>
+                        <div className="ml-4 text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-blue-600">
+                            {Math.round(((hyp as any)?.confidence || 0.6) * 100)}%
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Hypothesis Refinement Tool */}
+            {session.hypotheses && session.hypotheses.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <HypothesisRefinementTool
+                  initialHypothesis={{
+                    id: "hyp-0",
+                    hypothesis: typeof session.hypotheses[0] === "string" ? session.hypotheses[0] : (session.hypotheses[0] as any)?.hypothesis || "",
+                    confidence: 0.75,
+                    mechanism: "The entities identified interact through shared signaling pathways, modulating disease phenotype through transcriptional regulation.",
+                    experimentalApproach: "ChIP-seq and RNA-seq co-expression analysis across cell lines, complemented by phosphoproteomics for post-translational modifications.",
+                    validation: {
+                      required: [
+                        "Genetic perturbation studies (CRISPR/shRNA)",
+                        "In vivo validation (xenograft/transgenic)",
+                        "Temporal dynamics analysis",
+                      ],
+                      optional: [
+                        "Patient-derived organoid validation",
+                        "Orthogonal experimental confirmation",
+                        "Multi-omics integration",
+                      ],
+                    },
+                  }}
+                />
+              </motion.div>
+            )}
+
+            {/* Predicted Structures */}
+            {session.alphafold_results && session.alphafold_results.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.53 }}
+              >
+                <div className="bg-white rounded-lg border border-slate-200 p-6 overflow-hidden">
+                  <h3 className="text-lg font-bold text-slate-900 mb-4">Predicted Protein Structures</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {session.alphafold_results.map((result, idx) => (
+                      <motion.div
+                        key={result.accession}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.54 + idx * 0.1 }}
+                        className="rounded-lg border border-slate-200 overflow-hidden"
+                      >
+                        {/* 3D Viewer */}
+                        {result.pdb_url ? (
+                          <div className="bg-slate-50 p-4 rounded-t-lg">
+                            <MolstarViewer
+                              pdbUrl={result.pdb_url}
+                              proteinName={result.protein_name}
+                              accession={result.accession}
+                              alphafoldUrl={result.alphafold_url}
+                              height={300}
+                              perResiduePlddt={result.per_residue_plddt}
+                              bindingInterface={session.binding_interface}
+                            />
+                          </div>
+                        ) : null}
+
+                        {/* Structure Info */}
+                        <div className="p-4 bg-white">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-semibold text-slate-900">{result.protein_name}</p>
+                              <p className="text-xs text-slate-600">{result.uniprot_name}</p>
+                            </div>
+                            <span className="text-sm font-bold text-teal-600">{Math.round(result.mean_confidence)}% confidence</span>
+                          </div>
+
+                          {/* Confidence Bar */}
+                          <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
+                            <motion.div
+                              className="h-full bg-gradient-to-r from-teal-500 to-blue-500"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${result.mean_confidence}%` }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                            />
+                          </div>
+
+                          <a
+                            href={result.alphafold_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            View in AlphaFold DB
+                          </a>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Insights & Data Exploration */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55 }}
+            >
+              <InteractiveResultsViewer
+                hypotheses={(session.hypotheses || []).map((hyp, idx) => {
+                  const hypObj = typeof hyp === "string" ? { hypothesis: hyp } : hyp as any;
+                  return {
+                    id: `hyp-${idx}`,
+                    hypothesis: hypObj.hypothesis || "",
+                    confidence: hypObj.confidence || 0.7,
+                    testability: (hypObj.testability || "high") as "high" | "medium" | "low",
+                  };
+                })}
+                agentMessages={session.messages}
+                sessionId={session.session_id}
+              />
+            </motion.div>
+
+            {/* Agent Collaboration Board */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <AgentCollaborationBoard
+                sessionId={session.session_id}
+                onRefinement={(refinement) => {
+                  console.log("Refinement suggested:", refinement);
+                }}
+              />
+            </motion.div>
+
+            {/* Key Metrics Summary */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.65 }}
+            >
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: "Entities Extracted", value: session.entities_found?.length || 0, icon: "🔍" },
+                  { label: "Protein Structures", value: session.alphafold_results?.length || 0, icon: "🧬" },
+                  { label: "Hypotheses", value: session.hypotheses?.length || 0, icon: "💡" },
+                  { label: "Lead Compounds", value: session.lead_compounds?.length || 0, icon: "🧪" },
+                ].map((metric, idx) => (
+                  <motion.div
+                    key={metric.label}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.65 + idx * 0.05 }}
+                    className="bg-white rounded-lg p-4 border border-slate-200 text-center hover:border-slate-300 transition-colors"
+                  >
+                    <div className="text-2xl mb-2">{metric.icon}</div>
+                    <p className="text-3xl font-bold text-slate-900">{metric.value}</p>
+                    <p className="text-xs text-slate-600 mt-1">{metric.label}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
       ) : (
         /* ── 3-column workspace layout ──────────────────────────────── */
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 flex-col">
+
+          {/* ── Progress Header (visible during research) ────────────── */}
+          {isRunning && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-teal-50 px-4 py-3 flex-shrink-0"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="w-4 h-4 rounded-full border-2 border-blue-400 border-t-blue-600"
+                  />
+                  <span className="text-sm font-semibold text-slate-900">Research in Progress</span>
+                </div>
+                <div className="text-sm font-bold text-blue-600">
+                  {Math.round(smoothProgress)}%
+                </div>
+              </div>
+              <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-blue-500 to-teal-500"
+                  initial={{ width: "20%" }}
+                  animate={{ width: `${smoothProgress}%` }}
+                  transition={{ duration: 0.1, ease: "linear" }}
+                />
+              </div>
+              <p className="text-xs text-slate-600 mt-2">
+                {loadingStage === "initializing" && "Initializing research framework..."}
+                {loadingStage === "extracting" && "Extracting entities and relationships..."}
+                {loadingStage === "predicting" && "Predicting protein structures..."}
+                {loadingStage === "analyzing" && "Analyzing mechanistic hypotheses..."}
+                {loadingStage === "synthesizing" && "Synthesizing final report..."}
+              </p>
+            </motion.div>
+          )}
+
+          {/* ── Workspace Content ─────────────────────────────────────── */}
+          <div className="flex flex-1 min-h-0">
 
           {/* ── LEFT: Agent Chat Panel (collapsible) ────────────────── */}
           <motion.div
@@ -1191,11 +1568,11 @@ export default function LabPage() {
           <div className="flex-1 min-w-0 overflow-y-auto bg-slate-50 p-4 space-y-4">
 
             {/* Agent Reasoning Visualization — shows pipeline progress visually */}
-            {(isRunning || session.status === "completed") && session.messages.length > 0 && (
+            {isRunning && session.messages.length > 0 && (
               <AgentReasoningCards
                 activeNode={activeNode}
                 messages={session.messages}
-                completed={session.status === "completed"}
+                completed={false}
               />
             )}
 
@@ -1374,7 +1751,7 @@ export default function LabPage() {
             )}
 
             {/* Experiment Alternatives — shown after completion */}
-            {session.status === "completed" && (
+            {session && (
               <ExperimentAlternatives
                 session={session}
                 onSelectQuery={(q) => {
@@ -1390,7 +1767,7 @@ export default function LabPage() {
           <div className="w-72 flex-shrink-0 border-l border-slate-200 bg-white overflow-y-auto p-3 space-y-3">
 
             {/* Pipeline Graph */}
-            {(isRunning || session.status === "completed") && (
+            {isRunning && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Pipeline</p>
                 <div className="space-y-0">
@@ -1624,8 +2001,10 @@ export default function LabPage() {
               <p className="text-[8px] text-slate-400 mt-0.5">{new Date(session.created_at).toLocaleTimeString()}</p>
             </div>
           </div>
+          </div>  {/* close workspace content div */}
         </div>
       )}
+
     </div>
   );
 }

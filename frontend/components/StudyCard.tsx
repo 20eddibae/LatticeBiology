@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Calendar, Users, FlaskConical, Dna, Pill, Target, type LucideProps } from "lucide-react";
+import { Calendar, Users, FlaskConical, Dna, Pill, Target, ExternalLink, type LucideProps } from "lucide-react";
 import clsx from "clsx";
 import type { Study } from "@/lib/api";
 
@@ -130,7 +130,7 @@ export default function StudyCard({ study, isSelected = false }: StudyCardProps)
       </div>
 
       {/* Entity pills */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 mb-3">
         {study.entityCounts.proteins > 0 && (
           <EntityPill count={study.entityCounts.proteins} label="proteins"
             icon={FlaskConical} textColor="#0369A1" bgColor="#F0F9FF" />
@@ -144,6 +144,38 @@ export default function StudyCard({ study, isSelected = false }: StudyCardProps)
             icon={Pill} textColor="#15803D" bgColor="#F0FDF4" />
         )}
       </div>
+
+      {/* Paper links */}
+      {(study.sourceUrl || study.pmid) && (
+        <div className="border-t border-slate-100 pt-3 flex gap-2">
+          {study.sourceUrl && (
+            <motion.a
+              href={study.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              whileHover={{ scale: 1.02 }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 transition-colors"
+            >
+              <span>BioStudies</span>
+              <ExternalLink size={10} />
+            </motion.a>
+          )}
+          {study.pmid && (
+            <motion.a
+              href={`https://pubmed.ncbi.nlm.nih.gov/${study.pmid}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              whileHover={{ scale: 1.02 }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 transition-colors"
+            >
+              <span>PubMed</span>
+              <ExternalLink size={10} />
+            </motion.a>
+          )}
+        </div>
+      )}
     </motion.article>
   );
 }

@@ -125,12 +125,33 @@ async def get_studies() -> List[Study]:
     return ALL_STUDIES
 
 
+def _add_source_urls(study: Study) -> Study:
+    """Add source_url and pmid to study if not already present."""
+    if not study.source_url:
+        # Generate EBI BioStudies URL from accession
+        study.source_url = f"https://www.ebi.ac.uk/biostudies/studies/{study.accession}"
+
+    # Extract PMID from links if available
+    if not study.pmid:
+        for link in study.links:
+            if "pubmed" in link.url.lower() or "pmid" in link.description.lower() if link.description else False:
+                # Extract PMID from URL like https://pubmed.ncbi.nlm.nih.gov/12345678/
+                import re
+                match = re.search(r"(\d+)/?$", link.url)
+                if match:
+                    study.pmid = match.group(1)
+                    break
+
+    return study
+
+
 @app.get("/api/study/{accession}", response_model=Study, tags=["Studies"])
 async def get_study(accession: str) -> Study:
     """Return a single study. Tries DB → cache → live fetch → static mock → 404."""
     # 1. In-memory cache (fastest)
     if accession in pipeline.studies_cache:
-        return pipeline.studies_cache[accession]
+        study = pipeline.studies_cache[accession]
+        return _add_source_urls(study)
 
     # 2. Database
     if _DB_ENABLED and AsyncSessionLocal is not None:
@@ -139,7 +160,7 @@ async def get_study(accession: str) -> Study:
             study = await get_study_from_db(session, accession)
             if study:
                 pipeline.studies_cache[accession] = study  # warm the cache
-                return study
+                return _add_source_urls(study)
 
     # 3. Live fetch + AI processing
     try:
@@ -155,13 +176,13 @@ async def get_study(accession: str) -> Study:
             async with AsyncSessionLocal() as session:
                 await save_study(session, study)
 
-        return study
+        return _add_source_urls(study)
     except Exception as exc:
         logger.warning("[%s] On-demand processing failed for %s: %s", datetime.now(timezone.utc).isoformat(), accession, exc)
 
     # 4. Static mock fallback
     if accession in STUDIES_BY_ACCESSION:
-        return STUDIES_BY_ACCESSION[accession]
+        return _add_source_urls(STUDIES_BY_ACCESSION[accession])
 
     raise HTTPException(status_code=404, detail=f"Study '{accession}' not found")
 

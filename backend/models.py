@@ -24,6 +24,19 @@ class Link(CamelModel):
     description: Optional[str] = None
 
 
+class Relationship(CamelModel):
+    """A relationship between two entities in a study."""
+    source_entity: str  # Entity name (e.g., "EGFR")
+    target_entity: str  # Entity name (e.g., "HER2")
+    relationship_type: Literal[
+        "activates", "inhibits", "binds_to",
+        "upregulates", "downregulates", "associated_with",
+    ]
+    confidence: float = 0.5
+    evidence_snippet: str = ""
+    source_count: int = 1
+
+
 class Entity(CamelModel):
     id: str
     text: str
@@ -47,9 +60,13 @@ class Study(CamelModel):
     hypothesis: Optional[str] = None
     primary_target: Optional[str] = None
     entities: List[Entity] = []
+    relationships: List[Relationship] = []
     confidence_score: float = 0.0
     s3_key: Optional[str] = None
     processing_status: Literal["pending", "processing", "complete", "error"] = "pending"
+    # Deep linking to original sources
+    source_url: Optional[str] = None  # EBI BioStudies URL
+    pmid: Optional[str] = None  # PubMed ID, if available
 
 
 class PipelineStage(CamelModel):

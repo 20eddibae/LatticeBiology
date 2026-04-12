@@ -63,6 +63,8 @@ interface TooltipState {
 export default function NetworkGraph({ data, height = 320, onNodeClick, showLegend = true }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const isMountedRef = useRef(true);
+  const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false, x: 0, y: 0, content: { label: "", type: "" },
   });
@@ -75,11 +77,23 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
   }
 
   useEffect(() => {
-    if (!containerRef.current || !data?.elements) return;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMountedRef.current || !containerRef.current || !data?.elements) return;
+
+    // Guard against empty data
+    const nodes = data.elements.nodes ?? [];
+    const edges = data.elements.edges ?? [];
+    if (nodes.length === 0 || !containerRef.current) return;
 
     const elements: cytoscape.ElementDefinition[] = [];
 
-    for (const n of data.elements.nodes) {
+    for (const n of nodes) {
       const nd = n.data as any;
       elements.push({
         data: {
@@ -92,7 +106,7 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
       });
     }
 
-    for (const e of data.elements.edges) {
+    for (const e of edges) {
       const ed = e.data as any;
       const kdVal = ed.kd_value;
       const kdLabel = kdVal != null ? `Kd: ${kdVal >= 1000 ? `${(kdVal / 1000).toFixed(1)} μM` : `${kdVal.toFixed(1)} nM`}` : "";
@@ -113,13 +127,21 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
     }
 
     if (cyRef.current) {
-      cyRef.current.destroy();
+      try {
+        cyRef.current.destroy();
+      } catch (e) {
+        // Ignore destroy errors
+      }
+      cyRef.current = null;
     }
 
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements,
-      style: [
+    // Wrap initialization in try-catch to handle any Cytoscape errors
+    let cy: cytoscape.Core;
+    try {
+      cy = cytoscape({
+        container: containerRef.current,
+        elements,
+        style: [
         {
           selector: "node",
           style: {
@@ -176,8 +198,7 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
       ],
       layout: {
         name: "cose",
-        animate: true,
-        animationDuration: 500,
+        animate: false,
         nodeRepulsion: () => 8000,
         idealEdgeLength: () => 120,
         gravity: 0.25,
@@ -185,55 +206,116 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
       } as any,
       minZoom: 0.3,
       maxZoom: 3,
+      wheelSensitivity: 0.1,
     });
-
-    // Hover tooltips
-    cy.on("mouseover", "node", (evt) => {
-      const node = evt.target;
-      const pos = node.renderedPosition();
-      setTooltip({
-        visible: true,
-        x: pos.x,
-        y: pos.y - 30,
-        content: {
-          label: node.data("label"),
-          type: node.data("entityType"),
-          subtype: node.data("subtype") || undefined,
-        },
-      });
-    });
-
-    cy.on("mouseover", "edge", (evt) => {
-      const edge = evt.target;
-      const mid = edge.renderedMidpoint();
-      setTooltip({
-        visible: true,
-        x: mid.x,
-        y: mid.y - 20,
-        content: {
-          label: `${edge.data("source")} → ${edge.data("target")}`,
-          type: edge.data("relationship"),
-          kd: edge.data("kdLabel") || undefined,
-          relationship: edge.data("relationship"),
-        },
-      });
-    });
-
-    cy.on("mouseout", "node, edge", () => {
-      setTooltip((prev) => ({ ...prev, visible: false }));
-    });
-
-    if (onNodeClick) {
-      cy.on("tap", "node", (evt) => {
-        onNodeClick(evt.target.id());
-      });
+    } catch (e) {
+      console.error("Error initializing Cytoscape:", e);
+      return;
     }
 
+    // Defer event listener setup to avoid race conditions
+    const timeoutId = setTimeout(() => {
+      if (!isMountedRef.current || !cyRef.current) return;
+
+      try {
+        // Hover tooltips
+        const handleNodeHover = (evt: any) => {
+          if (!isMountedRef.current || !cyRef.current) return;
+          try {
+            const node = evt.target;
+            const pos = node.renderedPosition();
+            setTooltip({
+              visible: true,
+              x: pos.x,
+              y: pos.y - 30,
+              content: {
+                label: node.data("label"),
+                type: node.data("entityType"),
+                subtype: node.data("subtype") || undefined,
+              },
+            });
+          } catch (e) {
+            // Ignore hover errors
+          }
+        };
+
+        const handleEdgeHover = (evt: any) => {
+          if (!isMountedRef.current || !cyRef.current) return;
+          try {
+            const edge = evt.target;
+            const mid = edge.renderedMidpoint();
+            setTooltip({
+              visible: true,
+              x: mid.x,
+              y: mid.y - 20,
+              content: {
+                label: `${edge.data("source")} → ${edge.data("target")}`,
+                type: edge.data("relationship"),
+                kd: edge.data("kdLabel") || undefined,
+                relationship: edge.data("relationship"),
+              },
+            });
+          } catch (e) {
+            // Ignore hover errors
+          }
+        };
+
+        const handleOut = () => {
+          if (!isMountedRef.current || !cyRef.current) return;
+          setTooltip((prev) => ({ ...prev, visible: false }));
+        };
+
+        const handleNodeClick = (evt: any) => {
+          if (!isMountedRef.current || !cyRef.current || !onNodeClick) return;
+          try {
+            onNodeClick(evt.target.id());
+          } catch (e) {
+            // Ignore click errors
+          }
+        };
+
+        cy.on("mouseover", "node", handleNodeHover);
+        cy.on("mouseover", "edge", handleEdgeHover);
+        cy.on("mouseout", "node, edge", handleOut);
+        if (onNodeClick) {
+          cy.on("tap", "node", handleNodeClick);
+        }
+      } catch (e) {
+        console.error("Error setting up event listeners:", e);
+      }
+    }, 100);
+
     cyRef.current = cy;
+    setIsReady(true);
 
     return () => {
-      cy.destroy();
-      cyRef.current = null;
+      setIsReady(false);
+      clearTimeout(timeoutId);
+      try {
+        // Disable pointer events to prevent any further interactions
+        if (containerRef.current) {
+          containerRef.current.style.pointerEvents = "none";
+        }
+        // Remove all event listeners before destroying
+        try {
+          cy.removeAllListeners();
+        } catch (e) {
+          // Ignore removal errors
+        }
+        // Wait a tick before destroying to avoid race conditions
+        setTimeout(() => {
+          try {
+            if (cyRef.current) {
+              cyRef.current.destroy();
+              cyRef.current = null;
+            }
+          } catch (e) {
+            // Ignore destroy errors
+          }
+        }, 0);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     };
   }, [data, onNodeClick]);
 
@@ -241,7 +323,7 @@ export default function NetworkGraph({ data, height = 320, onNodeClick, showLege
     <div className="relative">
       <div
         ref={containerRef}
-        style={{ height, width: "100%" }}
+        style={{ height, width: "100%", pointerEvents: isReady ? "auto" : "none" }}
         className="rounded-xl border border-slate-200 bg-white"
       />
 
