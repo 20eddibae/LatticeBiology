@@ -125,6 +125,28 @@ _MOCK_ALPHAFOLD_DATA = {
         "entry_id": "AF-Q15116-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q15116",
     },
+    "ACE2": {
+        "protein_name": "ACE2",
+        "uniprot_name": "Angiotensin-converting enzyme 2",
+        "accession": "Q9BYF1",
+        "gene": "ACE2",
+        "mean_confidence": 88.5,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/6M17.pdb",
+        "entry_id": "AF-Q9BYF1-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/Q9BYF1",
+    },
+    "SPIKE RBD": {
+        "protein_name": "Spike RBD",
+        "uniprot_name": "Spike receptor-binding domain",
+        "accession": "P0DTC2",
+        "gene": "S",
+        "mean_confidence": 85.2,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/6LZG.pdb",
+        "entry_id": "AF-P0DTC2-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P0DTC2",
+    },
 }
 
 _MOCK_BINDING_INTERFACE = {

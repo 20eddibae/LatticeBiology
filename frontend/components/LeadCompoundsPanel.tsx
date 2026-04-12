@@ -68,13 +68,13 @@ export default function LeadCompoundsPanel({ compounds }: LeadCompoundsPanelProp
               <div className="bg-slate-800/50 rounded-md px-2 py-1.5">
                 <span className="text-slate-500 block text-[10px]">MW</span>
                 <span className="text-slate-200 font-mono">
-                  {comp.molecular_weight ? `${comp.molecular_weight.toFixed(1)}` : "N/A"}
+                  {comp.molecular_weight ? `${Number(comp.molecular_weight).toFixed(1)}` : "N/A"}
                 </span>
               </div>
               <div className="bg-slate-800/50 rounded-md px-2 py-1.5">
                 <span className="text-slate-500 block text-[10px]">LogP</span>
                 <span className="text-slate-200 font-mono">
-                  {comp.logp != null ? `${comp.logp.toFixed(2)}` : "N/A"}
+                  {comp.logp != null ? `${Number(comp.logp).toFixed(2)}` : "N/A"}
                 </span>
               </div>
             </div>

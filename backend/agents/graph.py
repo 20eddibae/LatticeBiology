@@ -128,15 +128,38 @@ async def node_pi_analyze(state: LabState) -> LabState:
     analysis = await pi_agent.analyze(query)
     entities: List[dict] = analysis.get("entities", [])
 
-    # Populate knowledge graph with extracted entities
+    # Populate knowledge graph with extracted entities and relationships
     try:
-        from knowledge_graph import knowledge_graph as kg, KGNode
+        from knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType
+
+        # Add nodes
+        entity_ids = []
         for entity in entities:
+            entity_id = entity["name"].upper()
+            entity_ids.append(entity_id)
             kg.add_node(KGNode(
-                id=entity["name"].upper(),
+                id=entity_id,
                 entity_type=entity.get("type", "unknown"),
                 metadata={"source": "query_extraction"}
             ))
+
+        # Add inferred relationships (proteins can bind/interact)
+        if len(entity_ids) >= 2:
+            # Create binding relationship between proteins
+            proteins = [e for e in entities if e.get("type") in ("protein", "gene")]
+            if len(proteins) >= 2:
+                for i, prot_a in enumerate(proteins):
+                    for prot_b in proteins[i+1:]:
+                        try:
+                            edge = KGEdge(
+                                source=prot_a["name"].upper(),
+                                target=prot_b["name"].upper(),
+                                relationship=RelationshipType.BINDS_TO,
+                                confidence=0.7
+                            )
+                            kg.add_edge(edge)
+                        except Exception:
+                            pass  # Skip if edge can't be added
     except Exception as e:
         logger.warning("Failed to populate knowledge graph: %s", e)
 
