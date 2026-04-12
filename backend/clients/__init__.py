@@ -1,1 +1,1 @@
-"""External API clients for multi-source biological data ingestion."""
+"""External API clients package."""
