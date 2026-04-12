@@ -10,11 +10,11 @@ interface ResearchLoadingAnimationProps {
 }
 
 const STAGES = [
-  { id: "initializing", label: "Initializing Research Framework", icon: "⚙️", desc: "Parsing query, identifying key entities and biological context" },
-  { id: "extracting", label: "Extracting Entities & Relationships", icon: "🔍", desc: "Named entity recognition, finding proteins, genes, pathways" },
-  { id: "predicting", label: "Predicting Protein Structures", icon: "🧬", desc: "AlphaFold structural predictions, analyzing confidence" },
-  { id: "analyzing", label: "Analyzing Mechanistic Hypotheses", icon: "⚛️", desc: "Synthesizing findings into testable hypotheses" },
-  { id: "synthesizing", label: "Synthesizing Final Report", icon: "📋", desc: "Compiling results and preparing actionable conclusions" },
+  { id: "initializing", label: "Initializing Research Framework", desc: "Parsing query, identifying key entities and biological context" },
+  { id: "extracting", label: "Extracting Entities & Relationships", desc: "Named entity recognition, finding proteins, genes, pathways" },
+  { id: "predicting", label: "Predicting Protein Structures", desc: "AlphaFold structural predictions, analyzing confidence" },
+  { id: "analyzing", label: "Analyzing Mechanistic Hypotheses", desc: "Synthesizing findings into testable hypotheses" },
+  { id: "synthesizing", label: "Synthesizing Final Report", desc: "Compiling results and preparing actionable conclusions" },
 ];
 
 export default function ResearchLoadingAnimation({
@@ -112,7 +112,6 @@ export default function ResearchLoadingAnimation({
                 {/* Stage Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">{stage.icon}</span>
                     <h3 className={`font-semibold ${
                       isActive ? "text-blue-900" : isCompleted ? "text-green-900" : "text-slate-900"
                     }`}>

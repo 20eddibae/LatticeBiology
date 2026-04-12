@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
 const nextConfig = {
   // Mol* (Molstar) uses Node.js modules that need to be transpiled
   transpilePackages: ["molstar"],
@@ -15,7 +17,7 @@ const nextConfig = {
       {
         source: "/api/:path*",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: "http://localhost:8000" },
+          { key: "Access-Control-Allow-Origin", value: backendUrl },
           { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,DELETE,OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
         ],
@@ -26,7 +28,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

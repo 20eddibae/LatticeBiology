@@ -344,15 +344,15 @@ export default function InteractiveResultsViewer({
                   Edit relationships by dragging nodes. Add new connections between entities or remove conflicting ones.
                 </p>
 
-                {/* Placeholder for interactive graph */}
+                {/* Graph visualization placeholder */}
                 <div className="w-full h-64 bg-white rounded-lg border-2 border-dashed border-teal-200 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="text-4xl mb-2">🕸️</div>
+                    <Network className="w-8 h-8 text-teal-400 mx-auto mb-2" />
                     <p className="text-sm text-slate-600">
                       Interactive graph visualization
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Drag entities to rearrange • Click edges to edit relationships
+                      Drag entities to rearrange / Click edges to edit relationships
                     </p>
                   </div>
                 </div>
@@ -416,9 +416,9 @@ export default function InteractiveResultsViewer({
               {/* Export buttons */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { format: "pdf" as const, label: "PDF Report", icon: "📄" },
-                  { format: "json" as const, label: "Raw JSON", icon: "🔗" },
-                  { format: "markdown" as const, label: "Markdown", icon: "📝" },
+                  { format: "pdf" as const, label: "PDF Report", icon: "PDF" },
+                  { format: "json" as const, label: "Raw JSON", icon: "JSON" },
+                  { format: "markdown" as const, label: "Markdown", icon: "MD" },
                 ].map(({ format, label, icon }) => (
                   <motion.button
                     key={format}
@@ -427,7 +427,7 @@ export default function InteractiveResultsViewer({
                     onClick={() => handleExport(format)}
                     className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg hover:border-blue-500 transition-all group"
                   >
-                    <div className="text-2xl mb-2">{icon}</div>
+                    <div className="text-sm font-bold text-blue-600 mb-2 bg-blue-50 rounded px-2 py-1 inline-block">{icon}</div>
                     <p className="text-xs font-medium text-slate-900">{label}</p>
                   </motion.button>
                 ))}
@@ -436,7 +436,7 @@ export default function InteractiveResultsViewer({
               {/* Export info */}
               <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-lg">
                 <p className="text-sm text-emerald-900">
-                  <span className="font-semibold">💡 Pro Tip:</span> Include confidence metrics in your report to help reviewers understand the experimental validation potential of each hypothesis.
+                  <span className="font-semibold">Pro Tip:</span> Include confidence metrics in your report to help reviewers understand the experimental validation potential of each hypothesis.
                 </p>
               </div>
             </motion.div>

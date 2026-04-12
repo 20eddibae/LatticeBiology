@@ -88,7 +88,7 @@ async def predict_docking(
     # Fetch properties if not provided
     if compound_props is None:
         try:
-            from clients.pubchem import get_compound_properties
+            from ..clients.pubchem import get_compound_properties
             compound_props = await get_compound_properties(compound_name)
         except Exception as exc:
             logger.warning("PubChem lookup failed for %s: %s", compound_name, exc)

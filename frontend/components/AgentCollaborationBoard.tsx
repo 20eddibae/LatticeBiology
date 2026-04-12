@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, Users, Lightbulb, Shield, CheckCircle2, Send } from "lucide-react";
+import { MessageCircle, Users, Lightbulb, Shield, CheckCircle2, Send, Sparkles } from "lucide-react";
 
 interface Agent {
   id: string;
@@ -284,8 +284,8 @@ export default function AgentCollaborationBoard({
                 animate={{ opacity: 1, y: 0 }}
                 className="flex gap-3"
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-lg bg-slate-200">
-                  🤔
+                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-slate-200">
+                  <Sparkles className="w-4 h-4 text-slate-500" />
                 </div>
                 <div className="bg-slate-100 text-slate-900 rounded-2xl rounded-tl-none p-4">
                   <div className="flex gap-1">
@@ -334,7 +334,7 @@ export default function AgentCollaborationBoard({
             </motion.button>
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            💡 Tip: Ask agents to validate findings, suggest experiments, or refine hypotheses
+            Tip: Ask agents to validate findings, suggest experiments, or refine hypotheses
           </p>
         </div>
       </motion.div>

@@ -36,6 +36,34 @@ except ImportError:
     pass
 
 
+async def groq_chat_with_retry(messages: list, model: str | None = None, temperature: float = 0.3, max_tokens: int = 2048, caller: str = "groq") -> str:
+    """Shared Groq chat call with exponential backoff on rate limits.
+    Use this for direct _llm_client calls outside BaseAgent."""
+    if not _llm_client:
+        return ""
+    model = model or _DEFAULT_MODEL
+    max_retries = 6
+    for attempt in range(max_retries):
+        try:
+            response = await _llm_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception as exc:
+            if "429" in str(exc) or "rate" in str(exc).lower():
+                wait = min(3 * (2 ** attempt), 60)
+                logger.info("[%s] Groq rate limited (attempt %d/%d), retrying in %ds", caller, attempt + 1, max_retries, wait)
+                await asyncio.sleep(wait)
+            else:
+                logger.warning("[%s] Groq call failed: %s", caller, exc)
+                return ""
+    logger.warning("[%s] Groq rate limit exhausted after %d retries", caller, max_retries)
+    return ""
+
+
 class BaseAgent:
     """
     Async wrapper around Groq chat API (primary) with Ollama fallback.
@@ -57,28 +85,37 @@ class BaseAgent:
         self.model = model
 
     async def _chat(self, user: str, system: str | None = None) -> str:
-        """Single chat call. Returns empty string on failure."""
+        """Single chat call with retry on Groq rate limits. Returns empty string on failure."""
         messages = [
             {"role": "system", "content": system or self.SYSTEM_PROMPT},
             {"role": "user", "content": user},
         ]
 
-        # ── Groq path (primary) with fallback on rate limit ────────────────
+        # ── Groq path (primary) — retry up to 5 times on rate limit ──────
         if _llm_client:
-            try:
-                response = await _llm_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=2048,
-                )
-                return (response.choices[0].message.content or "").strip()
-            except Exception as exc:
-                if "429" in str(exc) or "rate" in str(exc).lower():
-                    logger.info("[%s] Groq API rate limited, falling back to Ollama", self.name)
-                    # Fall through to Ollama immediately instead of retrying
-                else:
-                    logger.warning("[%s] Groq LLM call failed: %s", self.name, exc)
+            max_retries = 6
+            for attempt in range(max_retries):
+                try:
+                    response = await _llm_client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=2048,
+                    )
+                    return (response.choices[0].message.content or "").strip()
+                except Exception as exc:
+                    if "429" in str(exc) or "rate" in str(exc).lower():
+                        wait = min(3 * (2 ** attempt), 60)  # 3, 6, 12, 24, 48, 60 seconds
+                        logger.info(
+                            "[%s] Groq rate limited (attempt %d/%d), retrying in %ds",
+                            self.name, attempt + 1, max_retries, wait,
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.warning("[%s] Groq LLM call failed: %s", self.name, exc)
+                        break
+            else:
+                logger.warning("[%s] Groq rate limit exhausted after %d retries", self.name, max_retries)
 
         # ── Ollama fallback ────────────────────────────────────────────
         if _OLLAMA_AVAILABLE:

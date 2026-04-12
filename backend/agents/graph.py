@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from .base import BaseAgent, _DEFAULT_MODEL
+from .base import BaseAgent, _DEFAULT_MODEL, groq_chat_with_retry
 from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _llm_client, _MOCK_LEAD_COMPOUNDS
 
 logger = logging.getLogger(__name__)
@@ -394,8 +394,7 @@ async def node_insight(state: LabState) -> LabState:
     if proteins and _llm_client:
         protein_names = [p["name"] for p in proteins]
         try:
-            resp = await _llm_client.chat.completions.create(
-                model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
+            raw = await groq_chat_with_retry(
                 messages=[
                     {"role": "system", "content": (
                         "Classify each protein into exactly one subtype. "
@@ -405,12 +404,13 @@ async def node_insight(state: LabState) -> LabState:
                     )},
                     {"role": "user", "content": f"Classify these proteins: {', '.join(protein_names)}"},
                 ],
+                model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
                 temperature=0.0,
                 max_tokens=300,
-                response_format={"type": "json_object"},
+                caller="InsightSubtype",
             )
             import json
-            classifications = json.loads(resp.choices[0].message.content or "{}").get("classifications", [])
+            classifications = json.loads(raw or "{}").get("classifications", [])
             for cls in classifications:
                 name_upper = cls["name"].upper()
                 subtype_val = cls.get("subtype", "unknown")
@@ -639,20 +639,22 @@ async def node_compound_synthesis(state: LabState) -> LabState:
             except Exception:
                 pass
 
-        # Get scaffold description from OpenAI
+        # Get scaffold description via Groq with retry
         scaffold_desc = ""
         if _llm_client and comp.get("smiles"):
             try:
-                resp = await _llm_client.chat.completions.create(
-                    model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
+                scaffold_desc = await groq_chat_with_retry(
                     messages=[
                         {"role": "system", "content": "You are a medicinal chemistry expert. Respond with only a brief scaffold description."},
                         {"role": "user", "content": f"Describe the chemical scaffold of this compound in one sentence (e.g., 'dihydro-pyrazole derivative with a phenyl substituent').\nSMILES: {comp['smiles']}\nName: {comp.get('pref_name', 'unknown')}"},
                     ],
+                    model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
                     temperature=0.2,
                     max_tokens=100,
+                    caller="ScaffoldDesc",
                 )
-                scaffold_desc = (resp.choices[0].message.content or "").strip()
+                if not scaffold_desc:
+                    scaffold_desc = "Scaffold analysis unavailable"
             except Exception:
                 scaffold_desc = "Scaffold analysis unavailable"
 

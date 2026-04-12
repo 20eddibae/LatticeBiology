@@ -118,6 +118,15 @@ const ResearchLoadingAnimation = dynamic(() => import("@/components/ResearchLoad
   ssr: false,
 });
 
+const AgentTilesWorkspace = dynamic(() => import("@/components/AgentTilesWorkspace"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[380px] rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+      <Loader2 size={20} className="animate-spin text-slate-300" />
+    </div>
+  ),
+});
+
 const InteractiveResultsViewer = dynamic(() => import("@/components/InteractiveResultsViewer"), {
   ssr: false,
   loading: () => (
@@ -1569,9 +1578,9 @@ export default function LabPage() {
           {/* ── CENTER: 3D Workspace ────────────────────────────────── */}
           <div className="flex-1 min-w-0 overflow-y-auto bg-slate-50 p-4 space-y-4">
 
-            {/* Agent Reasoning Visualization — shows pipeline progress visually */}
-            {isRunning && session.messages.length > 0 && (
-              <AgentReasoningCards
+            {/* Agent Tiles Workspace — dynamic visual agent tiles */}
+            {isRunning && (
+              <AgentTilesWorkspace
                 activeNode={activeNode}
                 messages={session.messages}
                 completed={false}

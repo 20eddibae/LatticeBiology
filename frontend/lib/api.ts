@@ -271,7 +271,7 @@ const MOCK_JOB_QUEUE: JobQueueItem[] = [
 
 // ─── API client ───────────────────────────────────────────────────────────────
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = "";
 
 async function safeFetch<T>(url: string, options?: RequestInit): Promise<T | null> {
   try {
