@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy import Column, Float, Integer, String, Text
 from sqlalchemy import JSON
 
-from database import Base
+from .database import Base
 
 
 class StudyRow(Base):

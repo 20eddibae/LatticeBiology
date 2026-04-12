@@ -29,8 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from celery_app import _CELERY_ENABLED  # noqa: E402
-from database import (  # noqa: E402
+from .celery_app import _CELERY_ENABLED  # noqa: E402
+from .database import (  # noqa: E402
     AsyncSessionLocal,
     _DB_ENABLED,
     get_all_runs_from_db,
@@ -39,10 +39,10 @@ from database import (  # noqa: E402
     save_run,
     save_study,
 )
-from mock_data import ALL_STUDIES, STUDIES_BY_ACCESSION  # noqa: E402
-from models import AnnotatedText, PipelineRun, PipelineStatus, Study  # noqa: E402
-from pipeline import pipeline  # noqa: E402
-from tasks import run_ingestion_task  # noqa: E402
+from .mock_data import ALL_STUDIES, STUDIES_BY_ACCESSION  # noqa: E402
+from .models import AnnotatedText, PipelineRun, PipelineStatus, Study  # noqa: E402
+from .pipeline import pipeline  # noqa: E402
+from .tasks import run_ingestion_task  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Lifespan — DB init + cache warm-up
@@ -330,7 +330,7 @@ async def get_pipeline_jobs() -> List[Dict[str, Any]]:
 # Knowledge Graph endpoints
 # ---------------------------------------------------------------------------
 
-from knowledge_graph import knowledge_graph as _kg
+from .knowledge_graph import knowledge_graph as _kg
 
 
 @app.get("/api/knowledge-graph/stats", tags=["Knowledge Graph"])

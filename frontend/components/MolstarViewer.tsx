@@ -38,12 +38,17 @@ export default function MolstarViewer({
 
     try {
       setStatus("loading");
+      console.log("MolstarViewer: Starting initialization for", pdbUrl);
 
       // Dynamically import Mol* to avoid SSR issues
+      console.log("MolstarViewer: Importing Mol* libraries...");
       const { createPluginUI } = await import("molstar/lib/mol-plugin-ui");
       const { DefaultPluginUISpec } = await import("molstar/lib/mol-plugin-ui/spec");
 
-      if (!containerRef.current) return;
+      if (!containerRef.current) {
+        console.warn("MolstarViewer: Container ref lost during import");
+        return;
+      }
 
       // Clean up previous plugin
       if (pluginRef.current) {
@@ -55,16 +60,15 @@ export default function MolstarViewer({
 
       containerRef.current.innerHTML = "";
 
-      // Provide a minimal render function for Mol* UI
+      // Provide a simple render function for Mol* UI
       const render = (component: any, container: Element) => {
         if (!container) return;
-        // Mol* expects a render function that handles React components
-        // For headless mode, we just return the component
-        // The actual rendering happens via Mol*'s internal mechanisms
         return component;
       };
 
+      console.log("MolstarViewer: Creating plugin UI spec...");
       const spec = DefaultPluginUISpec();
+      // Disable unnecessary UI elements for faster initialization
       spec.layout = {
         initial: {
           isExpanded: false,
@@ -73,11 +77,20 @@ export default function MolstarViewer({
         },
       };
 
-      const plugin = await createPluginUI({
+      // Set a timeout for plugin initialization
+      const createPluginPromise = createPluginUI({
         target: containerRef.current,
         render,
         spec,
       });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Plugin creation timeout after 30s")), 30000)
+      );
+
+      console.log("MolstarViewer: Creating plugin with timeout...");
+      const plugin = await Promise.race([createPluginPromise, timeoutPromise]);
+      console.log("MolstarViewer: Plugin created successfully");
 
       pluginRef.current = plugin;
 
@@ -86,16 +99,27 @@ export default function MolstarViewer({
       const isCif = pdbUrl.includes(".cif") || pdbUrl.includes("model-cif");
       const format = isCif ? "mmcif" : "pdb";
 
-      // Download structure
-      const data = await plugin.builders.data.download(
+      console.log("MolstarViewer: Downloading structure from", pdbUrl, "Format:", format);
+      // Download structure with timeout
+      const downloadPromise = plugin.builders.data.download(
         { url: pdbUrl, isBinary },
         { state: { isGhost: false } }
       );
 
+      const dlTimeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Structure download timeout after 30s")), 30000)
+      );
+
+      const data = await Promise.race([downloadPromise, dlTimeoutPromise]);
+      console.log("MolstarViewer: Structure downloaded successfully");
+
       // Parse structure
+      console.log("MolstarViewer: Parsing trajectory...");
       const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      console.log("MolstarViewer: Trajectory parsed successfully");
 
       // Apply default visualization
+      console.log("MolstarViewer: Applying visualization preset...");
       await plugin.builders.structure.hierarchy.applyPreset(
         trajectory,
         "default",
@@ -107,9 +131,10 @@ export default function MolstarViewer({
         plugin.canvas3d.requestCameraReset();
       }
 
+      console.log("MolstarViewer: Initialization complete");
       setStatus("ready");
     } catch (err) {
-      console.error("Mol* initialization error:", err);
+      console.error("MolstarViewer initialization error:", err);
       console.warn(`Failed to load structure from: ${pdbUrl}`);
       setStatus("error");
     }
