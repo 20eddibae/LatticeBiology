@@ -203,6 +203,14 @@ async def node_alphafold(state: LabState) -> LabState:
                 if residues:
                     af["per_residue_plddt"] = residues
                     per_residue_plddt[af["accession"]] = residues
+                    # Recompute mean confidence from per-residue data if API returned 0
+                    if af.get("mean_confidence", 0) < 1 and residues:
+                        avg = sum(r["plddt_score"] for r in residues) / len(residues)
+                        af["mean_confidence"] = round(avg, 1)
+                        af["confidence_tier"] = (
+                            "high" if avg >= 70 else
+                            "medium" if avg >= 50 else "low"
+                        )
                     high = sum(1 for r in residues if r["plddt_score"] >= 90)
                     med = sum(1 for r in residues if 70 <= r["plddt_score"] < 90)
                     low = sum(1 for r in residues if r["plddt_score"] < 70)

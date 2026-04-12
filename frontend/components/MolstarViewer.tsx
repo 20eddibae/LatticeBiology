@@ -44,6 +44,7 @@ export default function MolstarViewer({
       console.log("MolstarViewer: Importing Mol* libraries...");
       const { createPluginUI } = await import("molstar/lib/mol-plugin-ui");
       const { DefaultPluginUISpec } = await import("molstar/lib/mol-plugin-ui/spec");
+      const { renderReact18 } = await import("molstar/lib/mol-plugin-ui/react18");
 
       if (!containerRef.current) {
         console.warn("MolstarViewer: Container ref lost during import");
@@ -60,28 +61,19 @@ export default function MolstarViewer({
 
       containerRef.current.innerHTML = "";
 
-      // Provide a simple render function for Mol* UI
-      const render = (component: any, container: Element) => {
-        if (!container) return;
-        return component;
-      };
-
-      console.log("MolstarViewer: Creating plugin UI spec...");
-      const spec = DefaultPluginUISpec();
-      // Disable unnecessary UI elements for faster initialization
-      spec.layout = {
-        initial: {
-          isExpanded: false,
-          showControls: false,
-          controlsDisplay: "reactive" as const,
-        },
-      };
-
-      // Set a timeout for plugin initialization
-      const createPluginPromise = createPluginUI({
+      const plugin = await createPluginUI({
         target: containerRef.current,
-        render,
-        spec,
+        render: renderReact18,
+        spec: {
+          ...DefaultPluginUISpec(),
+          layout: {
+            initial: {
+              isExpanded: false,
+              showControls: false,
+              controlsDisplay: "reactive" as const,
+            },
+          },
+        },
       });
 
       const timeoutPromise = new Promise((_, reject) =>
