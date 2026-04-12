@@ -375,7 +375,7 @@ async def node_insight(state: LabState) -> LabState:
     Also classifies protein entities into subtypes and looks up Kd for binds_to edges."""
     _insight(state, "Scanning knowledge graph for contradictions, underexplored pathways, and network patterns...")
 
-    from knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType, ProteinSubtype
+    from ..knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType, ProteinSubtype
     import os as _os
 
     entities = state.get("entities", [])
