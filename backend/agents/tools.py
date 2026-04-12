@@ -1,6 +1,7 @@
 """External tool functions for virtual lab agents — AlphaFold, UniProt."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -339,12 +340,15 @@ _MOCK_LEAD_COMPOUNDS = [
 _UNIPROT_SEARCH = "https://rest.uniprot.org/uniprotkb/search"
 _ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction"
 
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-_openai_client: Any = None
-if _OPENAI_API_KEY:
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_llm_client: Any = None
+if _GROQ_API_KEY:
     try:
         from openai import AsyncOpenAI
-        _openai_client = AsyncOpenAI(api_key=_OPENAI_API_KEY)
+        _llm_client = AsyncOpenAI(
+            api_key=_GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+        )
     except ImportError:
         pass
 
@@ -533,11 +537,11 @@ async def generate_binding_interface(
     gene_b: str = "",
 ) -> Optional[Dict[str, Any]]:
     """
-    Use OpenAI to predict the binding interface between two proteins.
+    Use LLM to predict the binding interface between two proteins.
     Returns structured interface data or None on failure.
     """
-    if not _openai_client:
-        logger.warning("No OpenAI client for binding interface prediction")
+    if not _llm_client:
+        logger.warning("No LLM client for binding interface prediction")
         return None
 
     prompt = _BINDING_INTERFACE_PROMPT.format(
@@ -547,31 +551,37 @@ async def generate_binding_interface(
         gene_b=gene_b or protein_b,
     )
 
-    try:
-        response = await _openai_client.chat.completions.create(
-            model=os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": "You are a structural biology expert. Return only valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_tokens=2048,
-        )
-        text = (response.choices[0].message.content or "").strip()
+    for attempt in range(3):
+        try:
+            response = await _llm_client.chat.completions.create(
+                model=os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
+                messages=[
+                    {"role": "system", "content": "You are a structural biology expert. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            text = (response.choices[0].message.content or "").strip()
 
-        # Strip markdown fences
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
-        text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE)
+            # Strip markdown fences
+            text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+            text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE)
 
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            data["protein_a"] = protein_a
-            data["protein_b"] = protein_b
-            return data
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+                data["protein_a"] = protein_a
+                data["protein_b"] = protein_b
+                return data
+            break
 
-    except Exception as exc:
-        logger.warning("Binding interface prediction failed: %s. Using mock data.", exc)
+        except Exception as exc:
+            if "429" in str(exc) or "rate" in str(exc).lower():
+                await asyncio.sleep(2 ** attempt + 1)
+                continue
+            logger.warning("Binding interface prediction failed: %s. Using mock data.", exc)
+            break
 
     # Fallback: use mock interface data
     if protein_a.upper() == "BRCA1" and protein_b.upper() in ("HIF1A", "HIF1α"):
@@ -586,8 +596,8 @@ async def generate_binding_energy_matrix(
     protein_b: str,
     binding_interface: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    """Use OpenAI to estimate residue-pair interaction energies based on binding interface data."""
-    if not _openai_client:
+    """Use LLM to estimate residue-pair interaction energies based on binding interface data."""
+    if not _llm_client:
         return None
 
     residues_a = binding_interface.get("interface_residues_a", [])
@@ -616,26 +626,31 @@ async def generate_binding_energy_matrix(
         f"hydrophobic -0.5 to -2, van der Waals -0.1 to -0.5, clashes +1 to +5."
     )
 
-    try:
-        resp = await _openai_client.chat.completions.create(
-            model=os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": "You are an expert computational structural biologist. Return only valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_tokens=1500,
-            response_format={"type": "json_object"},
-        )
-        text = resp.choices[0].message.content or "{}"
-        data = json.loads(text)
+    for attempt in range(3):
+        try:
+            resp = await _llm_client.chat.completions.create(
+                model=os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
+                messages=[
+                    {"role": "system", "content": "You are an expert computational structural biologist. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=1500,
+                response_format={"type": "json_object"},
+            )
+            text = resp.choices[0].message.content or "{}"
+            data = json.loads(text)
 
-        # Validate structure
-        if "rows" in data and "cols" in data and "values" in data:
-            data.setdefault("unit", "kcal/mol")
-            return data
+            if "rows" in data and "cols" in data and "values" in data:
+                data.setdefault("unit", "kcal/mol")
+                return data
+            break
 
-    except Exception as exc:
-        logger.warning("Binding energy matrix generation failed: %s", exc)
+        except Exception as exc:
+            if "429" in str(exc) or "rate" in str(exc).lower():
+                await asyncio.sleep(2 ** attempt + 1)
+                continue
+            logger.warning("Binding energy matrix generation failed: %s", exc)
+            break
 
     return None

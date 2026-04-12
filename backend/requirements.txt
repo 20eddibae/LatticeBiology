@@ -17,12 +17,11 @@ asyncpg==0.29.0
 celery[redis]==5.4.0
 redis==5.0.7
 
-# LLM — OpenAI API (primary)
+# LLM — Groq API (free Llama 3.3 70B, OpenAI-compatible)
 openai>=1.35.0
 
-# Agent orchestration — LangGraph (Path B)
+# Agent orchestration — LangGraph
 langgraph>=0.2.0
-langchain-openai>=0.1.0
 langchain-core>=0.2.0
 
 # SSE streaming

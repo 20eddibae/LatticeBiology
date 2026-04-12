@@ -1,6 +1,7 @@
-"""Base agent class for the BioStream virtual research lab."""
+"""Base agent class for the LatticeBio virtual research lab."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -9,22 +10,26 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-_DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini")
+# ── Groq API (free, OpenAI-compatible) ────────────────────────────────────────
+# Uses the openai SDK pointed at Groq's endpoint for Llama 3.3 70B inference.
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_DEFAULT_MODEL = os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile")
 
-# Initialise shared OpenAI client once
-_openai_client: Any = None
-if _OPENAI_API_KEY:
+_llm_client: Any = None
+if _GROQ_API_KEY:
     try:
         from openai import AsyncOpenAI
-        _openai_client = AsyncOpenAI(api_key=_OPENAI_API_KEY)
-        logger.info("Agent OpenAI client initialised (model=%s)", _DEFAULT_MODEL)
+        _llm_client = AsyncOpenAI(
+            api_key=_GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+        )
+        logger.info("Groq LLM client initialised (model=%s)", _DEFAULT_MODEL)
     except ImportError:
         logger.warning("openai library not installed — agents will use Ollama fallback")
 
 # Ollama fallback
 _OLLAMA_AVAILABLE = False
-if _openai_client is None:
+if _llm_client is None:
     try:
         import ollama  # type: ignore  # noqa: F401
         _OLLAMA_AVAILABLE = True
@@ -34,7 +39,7 @@ if _openai_client is None:
 
 class BaseAgent:
     """
-    Async wrapper around OpenAI chat API (primary) with Ollama fallback.
+    Async wrapper around Groq chat API (primary) with Ollama fallback.
     Subclasses define SYSTEM_PROMPT and domain-specific methods.
     """
 
@@ -59,19 +64,25 @@ class BaseAgent:
             {"role": "user", "content": user},
         ]
 
-        # ── OpenAI path (primary) ──────────────────────────────────────
-        if _openai_client:
-            try:
-                response = await _openai_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=2048,
-                )
-                return (response.choices[0].message.content or "").strip()
-            except Exception as exc:
-                logger.warning("[%s] OpenAI call failed: %s", self.name, exc)
-                # Fall through to Ollama
+        # ── Groq path (primary) with rate-limit retry ────────────────
+        if _llm_client:
+            for attempt in range(3):
+                try:
+                    response = await _llm_client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=2048,
+                    )
+                    return (response.choices[0].message.content or "").strip()
+                except Exception as exc:
+                    if "429" in str(exc) or "rate" in str(exc).lower():
+                        wait = 2 ** attempt + 1
+                        logger.info("[%s] Rate limited, retrying in %ds...", self.name, wait)
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.warning("[%s] Groq LLM call failed: %s", self.name, exc)
+                    break  # Fall through to Ollama
 
         # ── Ollama fallback ────────────────────────────────────────────
         if _OLLAMA_AVAILABLE:

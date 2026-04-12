@@ -86,11 +86,11 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="BioStream API",
+    title="LatticeBio API",
     version="2.0.0",
     description=(
-        "Biotech data intelligence platform — BioStudies API ingestion, "
-        "PostgreSQL persistence, Celery task queue, and local SLM NER."
+        "Virtual wet lab platform — BioStudies API ingestion, "
+        "structural biology, agent-driven drug discovery, and NER extraction."
     ),
     lifespan=lifespan,
 )
@@ -565,6 +565,8 @@ async def stream_lab_session(session_id: str, request: Request):
     async def event_generator():
         seen = 0
         last_status = None
+        # Track data field counts so we emit when data changes, not just status
+        last_data_fingerprint = ""
         import asyncio as _asyncio
 
         while True:
@@ -587,8 +589,22 @@ async def stream_lab_session(session_id: str, request: Request):
                     }
                 seen = len(messages)
 
-            # Emit status changes
-            if current_status != last_status:
+            # Build a fingerprint of data fields to detect changes
+            data_fingerprint = (
+                f"{current_status}|"
+                f"{len(session.get('entities_found', []))}|"
+                f"{len(session.get('alphafold_results', []))}|"
+                f"{len(session.get('hypotheses', []))}|"
+                f"{len(session.get('docking_results', []))}|"
+                f"{len(session.get('lead_compounds', []))}|"
+                f"{bool(session.get('critique'))}|"
+                f"{bool(session.get('final_summary'))}|"
+                f"{bool(session.get('binding_interface'))}|"
+                f"{bool(session.get('per_residue_plddt'))}"
+            )
+
+            # Emit status event when status OR data changes
+            if data_fingerprint != last_data_fingerprint:
                 yield {
                     "event": "status",
                     "data": json.dumps({
@@ -607,6 +623,7 @@ async def stream_lab_session(session_id: str, request: Request):
                         "final_summary": session.get("final_summary", ""),
                     }),
                 }
+                last_data_fingerprint = data_fingerprint
                 last_status = current_status
 
             # Done — send final snapshot and close

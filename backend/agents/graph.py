@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from .base import BaseAgent, _DEFAULT_MODEL
-from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _openai_client, _MOCK_LEAD_COMPOUNDS
+from .tools import lookup_alphafold, fetch_per_residue_plddt, generate_binding_interface, generate_binding_energy_matrix, _llm_client, _MOCK_LEAD_COMPOUNDS
 
 logger = logging.getLogger(__name__)
 
@@ -391,11 +391,11 @@ async def node_insight(state: LabState) -> LabState:
 
     # ── Classify protein subtypes via OpenAI ──
     proteins = [e for e in entities if e.get("type") == "protein"]
-    if proteins and _openai_client:
+    if proteins and _llm_client:
         protein_names = [p["name"] for p in proteins]
         try:
-            resp = await _openai_client.chat.completions.create(
-                model=_os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
+            resp = await _llm_client.chat.completions.create(
+                model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
                 messages=[
                     {"role": "system", "content": (
                         "Classify each protein into exactly one subtype. "
@@ -641,10 +641,10 @@ async def node_compound_synthesis(state: LabState) -> LabState:
 
         # Get scaffold description from OpenAI
         scaffold_desc = ""
-        if _openai_client and comp.get("smiles"):
+        if _llm_client and comp.get("smiles"):
             try:
-                resp = await _openai_client.chat.completions.create(
-                    model=_os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini"),
+                resp = await _llm_client.chat.completions.create(
+                    model=_os.getenv("LLM_AGENT_MODEL", "llama-3.3-70b-versatile"),
                     messages=[
                         {"role": "system", "content": "You are a medicinal chemistry expert. Respond with only a brief scaffold description."},
                         {"role": "user", "content": f"Describe the chemical scaffold of this compound in one sentence (e.g., 'dihydro-pyrazole derivative with a phenyl substituent').\nSMILES: {comp['smiles']}\nName: {comp.get('pref_name', 'unknown')}"},

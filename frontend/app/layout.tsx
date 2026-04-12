@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "BioStream — Biomedical Intelligence Platform",
-  description: "Privacy-preserving biomedical data ingestion, NER extraction, and research intelligence.",
+  title: "LatticeBio — Virtual Wet Lab Platform",
+  description: "AI-powered virtual wet lab for biomedical research, structural biology, and drug discovery.",
   keywords: ["biotech", "bioinformatics", "entity extraction", "pipeline", "AI", "NER"],
 };
 

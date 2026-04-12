@@ -45,8 +45,8 @@ export default function Sidebar() {
           <Dna size={15} className="text-white" />
         </div>
         <div>
-          <span className="block text-sm font-bold text-slate-900 leading-tight">BioStream</span>
-          <span className="block text-[10px] text-slate-400 uppercase tracking-widest">Intelligence</span>
+          <span className="block text-sm font-bold text-slate-900 leading-tight">LatticeBio</span>
+          <span className="block text-[10px] text-slate-400 uppercase tracking-widest">Virtual Wet Lab</span>
         </div>
       </div>
 

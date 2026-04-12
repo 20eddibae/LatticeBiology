@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -13,24 +14,27 @@ from .models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRel
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# OpenAI configuration (primary) + Ollama fallback
+# Groq configuration (primary, free Llama inference) + Ollama fallback
 # ---------------------------------------------------------------------------
 
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-_OPENAI_MODEL = os.getenv("OPENAI_NER_MODEL", "gpt-4o-mini")
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_LLM_NER_MODEL = os.getenv("LLM_NER_MODEL", "llama-3.1-8b-instant")
 
-_openai_client: Optional[Any] = None
-if _OPENAI_API_KEY:
+_llm_client: Optional[Any] = None
+if _GROQ_API_KEY:
     try:
         from openai import AsyncOpenAI
-        _openai_client = AsyncOpenAI(api_key=_OPENAI_API_KEY)
-        logger.info("OpenAI client initialised for NER (model=%s)", _OPENAI_MODEL)
+        _llm_client = AsyncOpenAI(
+            api_key=_GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+        )
+        logger.info("Groq LLM client initialised for NER (model=%s)", _LLM_NER_MODEL)
     except ImportError:
         logger.warning("openai library not installed — will try Ollama fallback")
 
 # Ollama fallback
 _OLLAMA_AVAILABLE = False
-if _openai_client is None:
+if _llm_client is None:
     try:
         import ollama  # type: ignore
         _OLLAMA_AVAILABLE = True
@@ -146,20 +150,20 @@ def _extract_json_from_text(raw: str) -> str:
 
 class BioStreamProcessor:
     """
-    Biomedical NER pipeline backed by OpenAI API (primary) with Ollama fallback.
+    Biomedical NER pipeline backed by Groq API (primary) with Ollama fallback.
     Falls back to an empty extraction when neither is available.
     """
 
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
-        self._openai = _openai_client
+        self._llm = _llm_client
         self._ollama_client: Optional[Any] = None
 
-        if self._openai:
+        if self._llm:
             logger.info(
-                "[%s] BioStreamProcessor using OpenAI (model=%s)",
+                "[%s] BioStreamProcessor using Groq LLM (model=%s)",
                 datetime.utcnow().isoformat(),
-                _OPENAI_MODEL,
+                _LLM_NER_MODEL,
             )
         elif _OLLAMA_AVAILABLE:
             import ollama
@@ -268,27 +272,31 @@ class BioStreamProcessor:
         user_message = f"Title: {title}\n\nAbstract: {abstract}"
         truncated = user_message[:3000]
 
-        # ── OpenAI path (primary) ──────────────────────────────────────
-        if self._openai:
-            try:
-                response = await self._openai.chat.completions.create(
-                    model=_OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": truncated},
-                    ],
-                    temperature=0,
-                    max_tokens=1024,
-                )
-                raw_content = response.choices[0].message.content or ""
-                return self._parse_slm_response(raw_content, title)
-            except Exception as exc:
-                logger.error(
-                    "[%s] OpenAI NER request failed: %s",
-                    datetime.utcnow().isoformat(),
-                    exc,
-                )
-                # Fall through to Ollama if available
+        # ── Groq path (primary) with rate-limit retry ────────────────
+        if self._llm:
+            for attempt in range(3):
+                try:
+                    response = await self._llm.chat.completions.create(
+                        model=_LLM_NER_MODEL,
+                        messages=[
+                            {"role": "system", "content": _SYSTEM_PROMPT},
+                            {"role": "user", "content": truncated},
+                        ],
+                        temperature=0,
+                        max_tokens=1024,
+                    )
+                    raw_content = response.choices[0].message.content or ""
+                    return self._parse_slm_response(raw_content, title)
+                except Exception as exc:
+                    if "429" in str(exc) or "rate" in str(exc).lower():
+                        await asyncio.sleep(2 ** attempt + 1)
+                        continue
+                    logger.error(
+                        "[%s] Groq NER request failed: %s",
+                        datetime.utcnow().isoformat(),
+                        exc,
+                    )
+                    break  # Fall through to Ollama
 
         # ── Ollama fallback ────────────────────────────────────────────
         if self._ollama_client:
