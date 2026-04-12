@@ -147,6 +147,17 @@ _MOCK_ALPHAFOLD_DATA = {
         "entry_id": "AF-P0DTC2-F1",
         "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P0DTC2",
     },
+    "SPIKE": {
+        "protein_name": "Spike",
+        "uniprot_name": "Spike glycoprotein",
+        "accession": "P0DTC2",
+        "gene": "S",
+        "mean_confidence": 85.2,
+        "confidence_tier": "high",
+        "pdb_url": "https://files.rcsb.org/download/6VSB.pdb",
+        "entry_id": "AF-P0DTC2-F1",
+        "alphafold_url": "https://alphafold.ebi.ac.uk/entry/P0DTC2",
+    },
 }
 
 _MOCK_BINDING_INTERFACE = {
