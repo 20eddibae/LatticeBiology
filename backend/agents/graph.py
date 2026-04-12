@@ -635,10 +635,17 @@ async def node_compound_synthesis(state: LabState) -> LabState:
         }
         lead_compounds.append(lead)
 
-        mw = lead["molecular_weight"]
-        mw_str = f"{mw:.1f}" if mw else "N/A"
-        logp = lead["logp"]
-        logp_str = f"{logp:.2f}" if logp else "N/A"
+        mw = lead.get("molecular_weight")
+        try:
+            mw_str = f"{float(mw):.1f}" if mw is not None and mw != "N/A" else "N/A"
+        except (ValueError, TypeError):
+            mw_str = str(mw) if mw else "N/A"
+
+        logp = lead.get("logp")
+        try:
+            logp_str = f"{float(logp):.2f}" if logp is not None and logp != "N/A" else "N/A"
+        except (ValueError, TypeError):
+            logp_str = str(logp) if logp else "N/A"
         _synth(
             state,
             f"**Lead compound: {lead['name']}**\n"
