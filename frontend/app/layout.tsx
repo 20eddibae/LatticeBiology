@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <head>
         {/* Mol* (Molstar) pre-built CSS for 3D molecular viewer */}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@5.8.0/build/viewer/molstar.css" />
       </head>
       <body className="bg-slate-50 text-slate-900 antialiased">
         <div className="flex h-screen overflow-hidden">

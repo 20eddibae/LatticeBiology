@@ -42,6 +42,7 @@ export default function MolstarViewer({
       // Dynamically import Mol* to avoid SSR issues
       const { createPluginUI } = await import("molstar/lib/mol-plugin-ui");
       const { DefaultPluginUISpec } = await import("molstar/lib/mol-plugin-ui/spec");
+      const { renderReact18 } = await import("molstar/lib/mol-plugin-ui/react18");
 
       if (!containerRef.current) return;
 
@@ -55,19 +56,9 @@ export default function MolstarViewer({
 
       containerRef.current.innerHTML = "";
 
-      // Provide a simple render function
-      const render = (component: any, container: Element) => {
-        if (!container) return;
-        // For simple elements, just append directly
-        if (typeof component === 'object' && component?.$$typeof === undefined) {
-          return;
-        }
-        return component;
-      };
-
       const plugin = await createPluginUI({
         target: containerRef.current,
-        render,
+        render: renderReact18,
         spec: {
           ...DefaultPluginUISpec(),
           layout: {
