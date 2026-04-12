@@ -128,6 +128,18 @@ async def node_pi_analyze(state: LabState) -> LabState:
     analysis = await pi_agent.analyze(query)
     entities: List[dict] = analysis.get("entities", [])
 
+    # Populate knowledge graph with extracted entities
+    try:
+        from knowledge_graph import knowledge_graph as kg, KGNode
+        for entity in entities:
+            kg.add_node(KGNode(
+                id=entity["name"].upper(),
+                entity_type=entity.get("type", "unknown"),
+                metadata={"source": "query_extraction"}
+            ))
+    except Exception as e:
+        logger.warning("Failed to populate knowledge graph: %s", e)
+
     # Push to live session
     session = state["sessions_ref"].get(state["session_id"])
     if session:
