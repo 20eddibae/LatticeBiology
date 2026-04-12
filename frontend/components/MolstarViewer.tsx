@@ -55,29 +55,28 @@ export default function MolstarViewer({
 
       containerRef.current.innerHTML = "";
 
-      // Provide a simple render function
+      // Provide a minimal render function for Mol* UI
       const render = (component: any, container: Element) => {
         if (!container) return;
-        // For simple elements, just append directly
-        if (typeof component === 'object' && component?.$$typeof === undefined) {
-          return;
-        }
+        // Mol* expects a render function that handles React components
+        // For headless mode, we just return the component
+        // The actual rendering happens via Mol*'s internal mechanisms
         return component;
+      };
+
+      const spec = DefaultPluginUISpec();
+      spec.layout = {
+        initial: {
+          isExpanded: false,
+          showControls: false,
+          controlsDisplay: "reactive" as const,
+        },
       };
 
       const plugin = await createPluginUI({
         target: containerRef.current,
         render,
-        spec: {
-          ...DefaultPluginUISpec(),
-          layout: {
-            initial: {
-              isExpanded: false,
-              showControls: false,
-              controlsDisplay: "reactive" as const,
-            },
-          },
-        },
+        spec,
       });
 
       pluginRef.current = plugin;
