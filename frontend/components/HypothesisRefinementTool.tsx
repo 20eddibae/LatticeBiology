@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, ChevronDown, Plus, Trash2, AlertCircle, CheckCircle } from "lucide-react";
+import { Sparkles, ChevronDown, Plus, Trash2, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
 
 interface Hypothesis {
   id: string;
@@ -211,8 +211,9 @@ export default function HypothesisRefinementTool({
         <div className="space-y-4">
           {/* Required validations */}
           <div>
-            <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">
-              ⚠️ Required for Publication
+            <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <AlertTriangle size={14} className="flex-shrink-0" />
+              Required for Publication
             </p>
             <div className="space-y-2">
               {hypothesis.validation.required.map((req, idx) => (
@@ -249,8 +250,9 @@ export default function HypothesisRefinementTool({
 
           {/* Optional validations */}
           <div>
-            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
-              💡 Recommended (Strengthens Argument)
+            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Sparkles size={14} className="flex-shrink-0" />
+              Recommended (Strengthens Argument)
             </p>
             <div className="space-y-2">
               {hypothesis.validation.optional.map((opt, idx) => (
@@ -350,8 +352,9 @@ export default function HypothesisRefinementTool({
               ) : (
                 <div className="space-y-4">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                    <p className="text-sm text-emerald-900">
-                      <span className="font-semibold">✓ Refinement Complete!</span>
+                    <p className="text-sm text-emerald-900 flex items-center gap-2">
+                      <CheckCircle size={16} className="flex-shrink-0 text-emerald-600" />
+                      <span className="font-semibold">Refinement Complete!</span>
                     </p>
                     <p className="text-xs text-emerald-800 mt-1">
                       Your hypothesis has been enhanced with additional mechanistic insights. Confidence increased to {Math.round((hypothesis.confidence + 0.1) * 100)}%.

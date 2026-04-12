@@ -28,7 +28,7 @@ const AGENTS: Agent[] = [
     name: "PI Agent",
     role: "Research Director",
     color: "#0F766E",
-    avatar: "🔬",
+    avatar: "PI",
     expertise: "Orchestration & hypothesis synthesis",
   },
   {
@@ -36,7 +36,7 @@ const AGENTS: Agent[] = [
     name: "Hypothesis Generator",
     role: "Theory Specialist",
     color: "#7C3AED",
-    avatar: "💡",
+    avatar: "HG",
     expertise: "Mechanistic reasoning & testability",
   },
   {
@@ -44,7 +44,7 @@ const AGENTS: Agent[] = [
     name: "Critic Agent",
     role: "Quality Assurance",
     color: "#D97706",
-    avatar: "🔍",
+    avatar: "CA",
     expertise: "Validation & finding gaps",
   },
   {
@@ -52,7 +52,7 @@ const AGENTS: Agent[] = [
     name: "Insight Agent",
     role: "Pattern Recognition",
     color: "#2563EB",
-    avatar: "🧠",
+    avatar: "IA",
     expertise: "Knowledge graph analysis",
   },
 ];

@@ -1420,10 +1420,10 @@ export default function LabPage() {
             >
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: "Entities Extracted", value: session.entities_found?.length || 0, icon: "🔍" },
-                  { label: "Protein Structures", value: session.alphafold_results?.length || 0, icon: "🧬" },
-                  { label: "Hypotheses", value: session.hypotheses?.length || 0, icon: "💡" },
-                  { label: "Lead Compounds", value: session.lead_compounds?.length || 0, icon: "🧪" },
+                  { label: "Entities Extracted", value: session.entities_found?.length || 0, Icon: AlertCircle },
+                  { label: "Protein Structures", value: session.alphafold_results?.length || 0, Icon: Dna },
+                  { label: "Hypotheses", value: session.hypotheses?.length || 0, Icon: Lightbulb },
+                  { label: "Lead Compounds", value: session.lead_compounds?.length || 0, Icon: Beaker },
                 ].map((metric, idx) => (
                   <motion.div
                     key={metric.label}
@@ -1432,7 +1432,9 @@ export default function LabPage() {
                     transition={{ delay: 0.65 + idx * 0.05 }}
                     className="bg-white rounded-lg p-4 border border-slate-200 text-center hover:border-slate-300 transition-colors"
                   >
-                    <div className="text-2xl mb-2">{metric.icon}</div>
+                    <div className="mb-2 flex justify-center">
+                      <metric.Icon size={24} className="text-slate-600" />
+                    </div>
                     <p className="text-3xl font-bold text-slate-900">{metric.value}</p>
                     <p className="text-xs text-slate-600 mt-1">{metric.label}</p>
                   </motion.div>
