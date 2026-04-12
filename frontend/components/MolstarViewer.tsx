@@ -16,15 +16,20 @@ interface MolstarViewerProps {
 }
 
 /**
- * Mol* (Molstar) 3D protein structure viewer with pLDDT coloring
- * and binding interface highlights.
+ * Mol* (Molstar) 3D protein structure viewer.
+ *
+ * Fix notes (blank viewer bug):
+ * - Container MUST be position:relative with explicit dimensions so Molstar's
+ *   internal position:absolute layout can anchor to it.
+ * - The globals.css no longer overrides .msp-plugin position/sizing, which was
+ *   collapsing the internal canvas to 0 height.
  */
 export default function MolstarViewer({
   pdbUrl,
   proteinName,
   accession,
   alphafoldUrl,
-  height = 280,
+  height = 400,
   perResiduePlddt,
   bindingInterface,
 }: MolstarViewerProps) {
@@ -32,13 +37,14 @@ export default function MolstarViewer({
   const pluginRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showInterface, setShowInterface] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
   const initViewer = useCallback(async () => {
     if (!containerRef.current || !pdbUrl) return;
 
     try {
       setStatus("loading");
-      console.log("MolstarViewer: Starting initialization for", pdbUrl);
+      setErrorMsg("");
 
       // Dynamically import Mol* to avoid SSR issues
       console.log("MolstarViewer: Importing Mol* libraries...");
@@ -53,12 +59,9 @@ export default function MolstarViewer({
 
       // Clean up previous plugin
       if (pluginRef.current) {
-        try {
-          pluginRef.current.dispose();
-        } catch {}
+        try { pluginRef.current.dispose(); } catch {}
         pluginRef.current = null;
       }
-
       containerRef.current.innerHTML = "";
 
       const plugin = await createPluginUI({
@@ -76,42 +79,32 @@ export default function MolstarViewer({
         },
       });
 
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Plugin creation timeout after 30s")), 30000)
-      );
-
-      console.log("MolstarViewer: Creating plugin with timeout...");
-      const plugin = await Promise.race([createPluginPromise, timeoutPromise]);
-      console.log("MolstarViewer: Plugin created successfully");
-
       pluginRef.current = plugin;
 
+      // Dark background for molecular visualization
+      if (plugin.canvas3d) {
+        plugin.canvas3d.setProps({
+          renderer: {
+            backgroundColor: 0x0f172a as any, // slate-900
+          },
+        });
+      }
+
       // Determine file format from URL
+      const isCif = pdbUrl.includes(".cif");
       const isBinary = pdbUrl.endsWith(".bcif");
-      const isCif = pdbUrl.includes(".cif") || pdbUrl.includes("model-cif");
       const format = isCif ? "mmcif" : "pdb";
 
-      console.log("MolstarViewer: Downloading structure from", pdbUrl, "Format:", format);
-      // Download structure with timeout
-      const downloadPromise = plugin.builders.data.download(
+      // Download structure
+      const data = await plugin.builders.data.download(
         { url: pdbUrl, isBinary },
         { state: { isGhost: false } }
       );
 
-      const dlTimeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Structure download timeout after 30s")), 30000)
-      );
-
-      const data = await Promise.race([downloadPromise, dlTimeoutPromise]);
-      console.log("MolstarViewer: Structure downloaded successfully");
-
-      // Parse structure
-      console.log("MolstarViewer: Parsing trajectory...");
+      // Parse trajectory
       const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
-      console.log("MolstarViewer: Trajectory parsed successfully");
 
-      // Apply default visualization
-      console.log("MolstarViewer: Applying visualization preset...");
+      // Apply preset — "auto" detects AlphaFold and applies pLDDT coloring
       await plugin.builders.structure.hierarchy.applyPreset(
         trajectory,
         "default",
@@ -123,11 +116,10 @@ export default function MolstarViewer({
         plugin.canvas3d.requestCameraReset();
       }
 
-      console.log("MolstarViewer: Initialization complete");
       setStatus("ready");
-    } catch (err) {
-      console.error("MolstarViewer initialization error:", err);
-      console.warn(`Failed to load structure from: ${pdbUrl}`);
+    } catch (err: any) {
+      console.error("Mol* initialization error:", err);
+      setErrorMsg(err?.message || "Could not render 3D structure");
       setStatus("error");
     }
   }, [pdbUrl]);
@@ -137,9 +129,7 @@ export default function MolstarViewer({
 
     return () => {
       if (pluginRef.current) {
-        try {
-          pluginRef.current.dispose();
-        } catch {}
+        try { pluginRef.current.dispose(); } catch {}
         pluginRef.current = null;
       }
     };
@@ -147,23 +137,26 @@ export default function MolstarViewer({
 
   // Stats for header
   const hasResidueData = perResiduePlddt && perResiduePlddt.length > 0;
-  const hasInterface = bindingInterface && (bindingInterface.interface_residues_a?.length > 0 || bindingInterface.interface_residues_b?.length > 0);
+  const hasInterface =
+    bindingInterface &&
+    (bindingInterface.interface_residues_a?.length > 0 ||
+      bindingInterface.interface_residues_b?.length > 0);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-slate-200 bg-white shadow-card overflow-hidden flex flex-col h-full"
+      className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="flex h-5 w-5 items-center justify-center rounded bg-brand-50">
-            <Atom size={10} className="text-brand-700" />
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-50 border border-teal-200">
+            <Atom size={12} className="text-teal-600" />
           </div>
           <div>
-            <p className="text-[11px] font-semibold text-slate-900">{proteinName}</p>
-            <p className="text-[8px] font-mono text-slate-400">{accession}</p>
+            <p className="text-[12px] font-semibold text-slate-800">{proteinName}</p>
+            <p className="text-[9px] font-mono text-slate-400">{accession}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -183,7 +176,7 @@ export default function MolstarViewer({
           {status === "error" && (
             <button
               onClick={initViewer}
-              className="flex items-center gap-1 text-[9px] text-slate-500 hover:text-brand-600 transition-colors"
+              className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-teal-600 transition-colors"
             >
               <RotateCcw size={8} />
               Retry
@@ -193,7 +186,7 @@ export default function MolstarViewer({
             href={alphafoldUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-[9px] text-brand-600 hover:text-brand-800 font-medium transition-colors"
+            className="flex items-center gap-1 text-[9px] text-teal-600 hover:text-teal-800 font-medium transition-colors"
           >
             <ExternalLink size={8} />
             AlphaFold
@@ -203,81 +196,92 @@ export default function MolstarViewer({
 
       {/* pLDDT legend bar */}
       {hasResidueData && (
-        <div className="flex items-center gap-2 px-4 py-1.5 border-b border-slate-100 bg-slate-50/30">
-          <span className="text-[8px] text-slate-400 font-medium">pLDDT:</span>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-blue-500" />
-            <span className="text-[8px] text-slate-500">&gt;90</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-cyan-400" />
-            <span className="text-[8px] text-slate-500">70-90</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-yellow-400" />
-            <span className="text-[8px] text-slate-500">50-70</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-orange-400" />
-            <span className="text-[8px] text-slate-500">&lt;50</span>
+        <div className="flex items-center gap-3 px-4 py-1.5 border-b border-slate-100 bg-slate-50/50">
+          <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">pLDDT</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+              <span className="text-[9px] text-slate-500">&gt;90</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-sm bg-cyan-400" />
+              <span className="text-[9px] text-slate-500">70-90</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-sm bg-yellow-400" />
+              <span className="text-[9px] text-slate-500">50-70</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
+              <span className="text-[9px] text-slate-500">&lt;50</span>
+            </div>
           </div>
           {hasInterface && showInterface && (
             <>
-              <span className="text-slate-300 mx-1">|</span>
-              <div className="w-2 h-2 rounded-sm bg-violet-500" />
-              <span className="text-[8px] text-slate-500">Interface</span>
+              <span className="text-slate-300 mx-0.5">|</span>
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-sm bg-violet-500" />
+                <span className="text-[9px] text-slate-500">Binding interface</span>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {/* Viewer container */}
-      <div className="relative" style={{ height }}>
+      {/* Viewer container — position:relative is REQUIRED for Molstar's
+          internal position:absolute layout to work correctly */}
+      <div style={{ height, position: "relative", overflow: "hidden" }}>
         {status === "loading" && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-50">
             <div className="text-center">
-              <div className="mx-auto mb-3 relative w-14 h-14">
+              <div className="mx-auto mb-3 relative w-16 h-16">
                 <motion.div
-                  className="absolute inset-0 rounded-full border-2 border-dashed border-brand-200"
+                  className="absolute inset-0 rounded-full border-2 border-dashed border-teal-300"
                   animate={{ rotate: 360 }}
                   transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
                 />
                 <motion.div
-                  className="absolute inset-2 rounded-full border border-dashed border-teal-200"
+                  className="absolute inset-2 rounded-full border border-dashed border-blue-300"
                   animate={{ rotate: -360 }}
                   transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
                 />
-                <Atom size={16} className="absolute inset-0 m-auto text-brand-400" />
+                <Atom size={18} className="absolute inset-0 m-auto text-teal-600" />
               </div>
-              <p className="text-[10px] text-slate-500 font-medium">Rendering structure...</p>
+              <p className="text-[11px] text-slate-600 font-medium">Rendering {proteinName}...</p>
+              <p className="text-[9px] text-slate-400 mt-1 font-mono">{accession}</p>
             </div>
           </div>
         )}
 
         {status === "error" && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-50/30">
-            <div className="text-center">
-              <AlertCircle size={18} className="mx-auto text-red-300 mb-2" />
-              <p className="text-[10px] text-red-500 font-medium">3D rendering unavailable</p>
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/95">
+            <div className="text-center max-w-xs">
+              <AlertCircle size={22} className="mx-auto text-red-400 mb-2" />
+              <p className="text-[11px] text-red-600 font-medium mb-1">3D rendering failed</p>
+              {errorMsg && <p className="text-[9px] text-slate-500 mb-2">{errorMsg}</p>}
               <a
                 href={alphafoldUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1.5 inline-flex items-center gap-1 text-[9px] text-brand-600 hover:text-brand-800"
+                className="mt-2 inline-flex items-center gap-1 text-[10px] text-teal-600 hover:text-teal-800"
               >
-                <ExternalLink size={8} />
+                <ExternalLink size={9} />
                 View on AlphaFold DB
               </a>
             </div>
           </div>
         )}
 
+        {/* Mol* renders into this div — it creates an internal .msp-plugin
+            child with position:absolute;inset:0 that fills this container */}
         <div
           ref={containerRef}
-          className="w-full h-full"
           style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
             opacity: status === "ready" ? 1 : 0,
-            transition: "opacity 0.3s ease",
+            transition: "opacity 0.4s ease",
           }}
         />
       </div>
@@ -288,30 +292,30 @@ export default function MolstarViewer({
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          className="border-t border-slate-100 bg-violet-50/30 px-4 py-2"
+          className="border-t border-violet-100 bg-violet-50/50 px-4 py-2"
         >
           <div className="flex items-center gap-4 text-[9px]">
             <div>
-              <span className="text-slate-400">Interface residues: </span>
+              <span className="text-slate-500">Interface residues: </span>
               <span className="text-violet-700 font-semibold">
                 {(bindingInterface!.interface_residues_a?.length || 0) +
                   (bindingInterface!.interface_residues_b?.length || 0)}
               </span>
             </div>
             <div>
-              <span className="text-slate-400">H-bonds: </span>
+              <span className="text-slate-500">H-bonds: </span>
               <span className="text-violet-700 font-semibold">
                 {bindingInterface!.hydrogen_bonds?.length || 0}
               </span>
             </div>
             <div>
-              <span className="text-slate-400">Area: </span>
+              <span className="text-slate-500">Area: </span>
               <span className="text-violet-700 font-semibold">
-                {bindingInterface!.interface_area_sq_angstrom?.toFixed(0) || "?"} A^2
+                {bindingInterface!.interface_area_sq_angstrom?.toFixed(0) || "?"} A&sup2;
               </span>
             </div>
             <div>
-              <span className="text-slate-400">Type: </span>
+              <span className="text-slate-500">Type: </span>
               <span className="text-violet-700 font-medium">
                 {bindingInterface!.binding_type}
               </span>

@@ -23,7 +23,7 @@ const SETTINGS_SECTIONS: {
     description: "Backend and external service endpoints",
     icon: Server,
     rows: [
-      { label: "Backend URL", description: "Base URL for the BioStream API", value: "http://localhost:8000", type: "text" },
+      { label: "Backend URL", description: "Base URL for the LatticeBio API", value: "http://localhost:8000", type: "text" },
       { label: "BioStudies Endpoint", description: "EBI BioStudies API endpoint", value: "https://www.ebi.ac.uk/biostudies/api/v1", type: "text" },
       { label: "Ollama Host", description: "Local Ollama inference server URL", value: "http://localhost:11434", type: "text" },
     ],
@@ -61,7 +61,7 @@ export default function SettingsPage() {
           <Settings size={20} className="text-brand-600" />
           <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
         </div>
-        <p className="text-sm text-slate-500 ml-8">Configure your BioStream instance</p>
+        <p className="text-sm text-slate-500 ml-8">Configure your LatticeBio instance</p>
       </motion.div>
 
       <div className="space-y-5">

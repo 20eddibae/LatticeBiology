@@ -518,6 +518,10 @@ export function streamLabSession(
       status: LabSession["status"];
       entities_found: LabEntity[];
       alphafold_results: AlphaFoldResult[];
+      per_residue_plddt?: Record<string, ResidueScore[]>;
+      binding_interface?: BindingInterface;
+      binding_energy_matrix?: BindingEnergyMatrix;
+      lead_compounds?: LeadCompound[];
       graph_insights: GraphInsights;
       hypotheses: string[];
       critique: string;
