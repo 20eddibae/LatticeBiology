@@ -130,7 +130,7 @@ async def node_pi_analyze(state: LabState) -> LabState:
 
     # Populate knowledge graph with extracted entities and relationships
     try:
-        from knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType
+        from ..knowledge_graph import knowledge_graph as kg, KGNode, KGEdge, RelationshipType
 
         # Add nodes
         entity_ids = []
@@ -420,7 +420,7 @@ async def node_insight(state: LabState) -> LabState:
 
     # ── Look up Kd values for binds_to edges ──
     try:
-        from clients.chembl import get_chembl_bioactivities
+        from ..clients.chembl import get_chembl_bioactivities
         for u, v, key, d in list(kg._graph.edges(data=True, keys=True)):
             if d.get("relationship") == "binds_to" and d.get("kd_value") is None:
                 # Try to find Kd from ChEMBL bioactivities
@@ -571,8 +571,8 @@ def _synth(state: LabState, content: str, msg_type: str = "message", tool_data: 
 async def node_compound_synthesis(state: LabState) -> LabState:
     """Synthesis node: identify lead small-molecule inhibitors using ChEMBL + PubChem."""
     import os as _os
-    from clients.chembl import search_chembl_compounds, get_chembl_bioactivities
-    from clients.pubchem import get_compound_properties, get_smiles_from_pubchem
+    from ..clients.chembl import search_chembl_compounds, get_chembl_bioactivities
+    from ..clients.pubchem import get_compound_properties, get_smiles_from_pubchem
 
     _synth(state, "Searching for lead small-molecule inhibitors targeting identified proteins...")
 
