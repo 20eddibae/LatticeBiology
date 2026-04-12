@@ -378,12 +378,12 @@ async def lookup_alphafold(protein_name: str) -> Optional[dict]:
                     if results:
                         break
             else:
-                return None
+                raise ValueError(f"No UniProt entry found for {protein_name}")
 
             entry = results[0]
             accession: str = entry.get("primaryAccession", "")
             if not accession:
-                return None
+                raise ValueError(f"No accession found for {protein_name}")
 
             # Parse human-readable names
             prot_desc = (
@@ -402,11 +402,11 @@ async def lookup_alphafold(protein_name: str) -> Optional[dict]:
             # ── Step 2: AlphaFold prediction ──────────────────────────────────
             af_resp = await client.get(f"{_ALPHAFOLD_API}/{accession}")
             if af_resp.status_code != 200:
-                return None
+                raise ValueError(f"AlphaFold API returned {af_resp.status_code} for {accession}")
 
             af_data = af_resp.json()
             if not af_data:
-                return None
+                raise ValueError(f"No AlphaFold data found for {accession}")
 
             af = af_data[0]
             confidence = round(float(af.get("confidenceAvgLocalScore", 0)), 1)
