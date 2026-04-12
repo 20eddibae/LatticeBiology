@@ -390,7 +390,7 @@ async def docking_predict(
     target: str = "COX-2",
 ) -> Dict[str, Any]:
     """Heuristic docking prediction for a compound-target pair."""
-    from agents.docking import predict_docking
+    from .agents.docking import predict_docking
     return await predict_docking(compound, target)
 
 
@@ -400,7 +400,7 @@ async def docking_batch(
     target: str = "COX-2",
 ) -> List[Dict[str, Any]]:
     """Batch docking prediction. Comma-separated compound names."""
-    from agents.docking import batch_docking
+    from .agents.docking import batch_docking
     compound_list = [c.strip() for c in compounds.split(",") if c.strip()]
     return await batch_docking(compound_list, target)
 
@@ -478,7 +478,7 @@ async def start_lab_session(
     Start a new multi-agent virtual lab session.
     Returns immediately with a session_id; poll /api/lab/session/{id} for progress.
     """
-    from agents.graph import run_lab_graph  # LangGraph-based orchestration
+    from .agents.graph import run_lab_graph  # LangGraph-based orchestration
 
     query = body.get("query", "").strip()
     if not query:
