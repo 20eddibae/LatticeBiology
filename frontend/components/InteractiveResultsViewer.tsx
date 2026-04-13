@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare,
@@ -11,6 +12,19 @@ import {
   ChevronDown,
   Send,
 } from "lucide-react";
+import type { KGSubgraph } from "@/lib/api";
+
+const NetworkGraph = dynamic(() => import("@/components/NetworkGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] rounded-lg border border-teal-200 bg-white flex items-center justify-center">
+      <div className="text-center">
+        <Network className="w-8 h-8 text-teal-400 mx-auto mb-2 animate-pulse" />
+        <p className="text-sm text-slate-500">Loading network graph...</p>
+      </div>
+    </div>
+  ),
+});
 
 interface Hypothesis {
   id: string;
@@ -23,6 +37,7 @@ interface InteractiveResultsViewerProps {
   hypotheses: Hypothesis[];
   agentMessages: any[];
   sessionId: string;
+  kgData?: KGSubgraph | null;
 }
 
 type TabType = "hypotheses" | "chat" | "export" | "graph";
@@ -31,6 +46,7 @@ export default function InteractiveResultsViewer({
   hypotheses: initialHypotheses,
   agentMessages,
   sessionId,
+  kgData,
 }: InteractiveResultsViewerProps) {
   const [activeTab, setActiveTab] = useState<TabType>("hypotheses");
   const [hypotheses, setHypotheses] = useState(initialHypotheses);
@@ -341,31 +357,35 @@ export default function InteractiveResultsViewer({
                   Interactive Knowledge Graph
                 </h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Edit relationships by dragging nodes. Add new connections between entities or remove conflicting ones.
+                  Drag nodes to rearrange. Hover for details. Scroll to zoom.
                 </p>
 
-                {/* Graph visualization placeholder */}
-                <div className="w-full h-64 bg-white rounded-lg border-2 border-dashed border-teal-200 flex items-center justify-center">
-                  <div className="text-center">
-                    <Network className="w-8 h-8 text-teal-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-600">
-                      Interactive graph visualization
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Drag entities to rearrange / Click edges to edit relationships
-                    </p>
+                {kgData && kgData.node_count > 0 ? (
+                  <div className="bg-white rounded-lg border border-teal-200 overflow-hidden">
+                    <NetworkGraph
+                      data={kgData}
+                      height={400}
+                      showLegend
+                    />
+                    <div className="px-4 py-2 bg-teal-50 border-t border-teal-200 flex items-center justify-between">
+                      <span className="text-xs text-teal-700 font-medium">
+                        {kgData.node_count} entities, {kgData.edge_count} relationships
+                      </span>
+                    </div>
                   </div>
-                </div>
-
-                {/* Quick actions */}
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button className="px-3 py-2 bg-white border border-teal-200 rounded-lg text-sm font-medium text-teal-700 hover:bg-teal-50 transition-colors">
-                    + Add Entity
-                  </button>
-                  <button className="px-3 py-2 bg-white border border-red-200 rounded-lg text-sm font-medium text-red-700 hover:bg-red-50 transition-colors">
-                    - Remove Selected
-                  </button>
-                </div>
+                ) : (
+                  <div className="w-full h-64 bg-white rounded-lg border-2 border-dashed border-teal-200 flex items-center justify-center">
+                    <div className="text-center">
+                      <Network className="w-8 h-8 text-teal-400 mx-auto mb-2" />
+                      <p className="text-sm text-slate-600">
+                        No graph data yet
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        The knowledge graph will appear here once entities are extracted
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

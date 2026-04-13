@@ -368,18 +368,26 @@ export default function AgentTilesWorkspace({
     return () => clearInterval(interval);
   }, []);
 
-  // Group messages by pipeline stage (same logic as AgentReasoningCards)
+  // Group messages by pipeline stage using explicit pipeline_node from backend
   const stageMessages = useMemo(() => {
     const map: Record<string, AgentMessage[]> = {};
     for (const msg of messages) {
-      const nodeMap: Record<string, string> = {
-        orchestrator: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "alphafold" : "pi_analyze",
-        specialist: "hypothesis",
-        critic: "critic",
-        analyst: "insight",
-        experimentalist: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "docking" : "validation",
-      };
-      const stage = msg.message_type === "final" ? "synthesize" : (nodeMap[msg.agent_role] ?? "pi_analyze");
+      // Use explicit pipeline_node when available, fallback to role-based mapping
+      let stage: string;
+      if (msg.pipeline_node) {
+        stage = msg.pipeline_node;
+      } else if (msg.message_type === "final") {
+        stage = "synthesize";
+      } else {
+        const nodeMap: Record<string, string> = {
+          orchestrator: "pi_analyze",
+          specialist: "hypothesis",
+          critic: "critic",
+          analyst: "insight",
+          experimentalist: "validation",
+        };
+        stage = nodeMap[msg.agent_role] ?? "pi_analyze";
+      }
       if (!map[stage]) map[stage] = [];
       map[stage].push(msg);
     }

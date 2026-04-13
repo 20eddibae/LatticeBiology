@@ -78,6 +78,7 @@ def _push_msg(
     content: str,
     msg_type: str = "message",
     tool_data: Any = None,
+    pipeline_node: str | None = None,
 ) -> None:
     """Push a message into the live session so the frontend can poll it."""
     session = state["sessions_ref"].get(state["session_id"])
@@ -92,27 +93,28 @@ def _push_msg(
         "timestamp": _now(),
         "message_type": msg_type,
         "tool_data": tool_data,
+        "pipeline_node": pipeline_node,
     })
 
 
-def _pi(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
-    _push_msg(state, "PI Agent", "orchestrator", "#0F766E", content, msg_type, tool_data)
+def _pi(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None, pipeline_node: str = "pi_analyze") -> None:
+    _push_msg(state, "PI Agent", "orchestrator", "#0F766E", content, msg_type, tool_data, pipeline_node)
 
 
 def _hyp(state: LabState, content: str) -> None:
-    _push_msg(state, "Hypothesis Agent", "specialist", "#7C3AED", content)
+    _push_msg(state, "Hypothesis Agent", "specialist", "#7C3AED", content, pipeline_node="hypothesis")
 
 
 def _crit(state: LabState, content: str) -> None:
-    _push_msg(state, "Critic Agent", "critic", "#D97706", content)
+    _push_msg(state, "Critic Agent", "critic", "#D97706", content, pipeline_node="critic")
 
 
 def _insight(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
-    _push_msg(state, "Insight Agent", "analyst", "#2563EB", content, msg_type, tool_data)
+    _push_msg(state, "Insight Agent", "analyst", "#2563EB", content, msg_type, tool_data, pipeline_node="insight")
 
 
-def _val(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
-    _push_msg(state, "Validation Agent", "experimentalist", "#059669", content, msg_type, tool_data)
+def _val(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None, pipeline_node: str = "validation") -> None:
+    _push_msg(state, "Validation Agent", "experimentalist", "#059669", content, msg_type, tool_data, pipeline_node)
 
 
 # ---------------------------------------------------------------------------
@@ -192,13 +194,13 @@ async def node_alphafold(state: LabState) -> LabState:
     per_residue_plddt: Dict[str, List[dict]] = {}
 
     for prot in proteins:
-        _pi(state, f"→ AlphaFold tool call: **{prot['name']}**", msg_type="tool_call")
+        _pi(state, f"→ AlphaFold tool call: **{prot['name']}**", msg_type="tool_call", pipeline_node="alphafold")
         af = await lookup_alphafold(prot["name"])
         if af:
             # Fetch per-residue pLDDT from the PDB file
             pdb_url = af.get("pdb_url", "")
             if pdb_url:
-                _pi(state, f"Fetching per-residue pLDDT scores for **{prot['name']}**...")
+                _pi(state, f"Fetching per-residue pLDDT scores for **{prot['name']}**...", pipeline_node="alphafold")
                 residues = await fetch_per_residue_plddt(pdb_url)
                 if residues:
                     af["per_residue_plddt"] = residues
@@ -218,6 +220,7 @@ async def node_alphafold(state: LabState) -> LabState:
                         state,
                         f"Per-residue pLDDT parsed: **{len(residues)}** residues — "
                         f"**{high}** high (≥90), **{med}** medium (70-90), **{low}** low (<70)",
+                        pipeline_node="alphafold",
                     )
 
             af_results.append(af)
@@ -230,9 +233,10 @@ async def node_alphafold(state: LabState) -> LabState:
                 f"Mean pLDDT score: **{af['mean_confidence']}%** ({tier_label})",
                 msg_type="tool_result",
                 tool_data=af,
+                pipeline_node="alphafold",
             )
         else:
-            _pi(state, f"No AlphaFold entry found for **{prot['name']}** in reviewed human proteome.")
+            _pi(state, f"No AlphaFold entry found for **{prot['name']}** in reviewed human proteome.", pipeline_node="alphafold")
 
     # Predict binding interface if we have 2 proteins
     binding_interface: Dict[str, Any] = {}
@@ -243,6 +247,7 @@ async def node_alphafold(state: LabState) -> LabState:
             state,
             f"Predicting binding interface between **{prot_a['protein_name']}** and **{prot_b['protein_name']}**...",
             msg_type="tool_call",
+            pipeline_node="alphafold",
         )
         interface = await generate_binding_interface(
             prot_a["protein_name"],
@@ -265,12 +270,13 @@ async def node_alphafold(state: LabState) -> LabState:
                 f"*{interface.get('description', '')}*",
                 msg_type="tool_result",
                 tool_data=interface,
+                pipeline_node="alphafold",
             )
 
     # Generate binding energy matrix if we have an interface
     energy_matrix: Dict[str, Any] = {}
     if binding_interface:
-        _pi(state, "Computing residue-to-residue interaction energy matrix...", msg_type="tool_call")
+        _pi(state, "Computing residue-to-residue interaction energy matrix...", msg_type="tool_call", pipeline_node="alphafold")
         matrix = await generate_binding_energy_matrix(
             binding_interface.get("protein_a", proteins[0]["name"] if proteins else ""),
             binding_interface.get("protein_b", proteins[1]["name"] if len(proteins) > 1 else ""),
@@ -286,6 +292,7 @@ async def node_alphafold(state: LabState) -> LabState:
                 f"Unit: {matrix.get('unit', 'kcal/mol')}",
                 msg_type="tool_result",
                 tool_data=matrix,
+                pipeline_node="alphafold",
             )
 
     # Push to live session
@@ -505,7 +512,7 @@ async def node_docking(state: LabState) -> LabState:
     proteins = [e for e in entities if e.get("type") == "protein"][:2]
 
     if not compounds or not proteins:
-        _val(state, "No compound-protein pairs identified for docking prediction.")
+        _val(state, "No compound-protein pairs identified for docking prediction.", pipeline_node="docking")
         return {**state, "docking_results": []}
 
     docking_results = []
@@ -515,6 +522,7 @@ async def node_docking(state: LabState) -> LabState:
                 state,
                 f"Docking prediction: **{comp['name']}** → **{prot['name']}**",
                 msg_type="tool_call",
+                pipeline_node="docking",
             )
             result = await predict_docking(comp["name"], prot["name"])
             docking_results.append(result)
@@ -528,9 +536,10 @@ async def node_docking(state: LabState) -> LabState:
                     f"{result.get('interpretation', '')}",
                     msg_type="tool_result",
                     tool_data=result,
+                    pipeline_node="docking",
                 )
             else:
-                _val(state, f"No data available for {comp['name']}")
+                _val(state, f"No data available for {comp['name']}", pipeline_node="docking")
 
     session = state["sessions_ref"].get(state["session_id"])
     if session:
@@ -573,7 +582,7 @@ async def node_validation(state: LabState) -> LabState:
 
 
 def _synth(state: LabState, content: str, msg_type: str = "message", tool_data: Any = None) -> None:
-    _push_msg(state, "Synthesis Agent", "specialist", "#6D28D9", content, msg_type, tool_data)
+    _push_msg(state, "Synthesis Agent", "specialist", "#6D28D9", content, msg_type, tool_data, pipeline_node="compound_synthesis")
 
 
 async def node_compound_synthesis(state: LabState) -> LabState:
@@ -728,7 +737,7 @@ async def node_compound_synthesis(state: LabState) -> LabState:
 
 async def node_synthesize(state: LabState) -> LabState:
     """PI Agent: synthesize all findings into a final research brief."""
-    _pi(state, "All agents have reported. Synthesizing findings into final research brief...")
+    _pi(state, "All agents have reported. Synthesizing findings into final research brief...", pipeline_node="synthesize")
 
     # Enrich critique with graph insights and validation plan for synthesis
     enriched_critique = dict(state.get("critique", {}))
@@ -747,7 +756,7 @@ async def node_synthesize(state: LabState) -> LabState:
         state.get("alphafold_results", []),
     )
 
-    _pi(state, f"**Research Brief**\n\n{summary}", msg_type="final")
+    _pi(state, f"**Research Brief**\n\n{summary}", msg_type="final", pipeline_node="synthesize")
 
     # Assemble consolidated visualization_data payload
     visualization_data: Dict[str, Any] = {

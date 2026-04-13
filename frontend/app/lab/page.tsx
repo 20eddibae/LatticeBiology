@@ -622,17 +622,24 @@ function AgentReasoningCards({
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const activeIdx = activeNode ? PIPELINE_NODES.findIndex((n) => n.id === activeNode) : -1;
 
-  // Group messages by pipeline stage
+  // Group messages by pipeline stage using explicit pipeline_node from backend
   const stageMessages: Record<string, AgentMessage[]> = {};
   for (const msg of messages) {
-    const nodeMap: Record<string, string> = {
-      orchestrator: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "alphafold" : "pi_analyze",
-      specialist: "hypothesis",
-      critic: "critic",
-      analyst: "insight",
-      experimentalist: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "docking" : "validation",
-    };
-    const stage = msg.message_type === "final" ? "synthesize" : (nodeMap[msg.agent_role] ?? "pi_analyze");
+    let stage: string;
+    if (msg.pipeline_node) {
+      stage = msg.pipeline_node;
+    } else if (msg.message_type === "final") {
+      stage = "synthesize";
+    } else {
+      const nodeMap: Record<string, string> = {
+        orchestrator: "pi_analyze",
+        specialist: "hypothesis",
+        critic: "critic",
+        analyst: "insight",
+        experimentalist: "validation",
+      };
+      stage = nodeMap[msg.agent_role] ?? "pi_analyze";
+    }
     if (!stageMessages[stage]) stageMessages[stage] = [];
     stageMessages[stage].push(msg);
   }
@@ -921,16 +928,21 @@ export default function LabPage() {
       onMessage: (msg) => {
         setSession((prev) => {
           if (!prev) return prev;
-          const nodeMap: Record<string, string> = {
-            orchestrator: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "alphafold" : "pi_analyze",
-            specialist: "hypothesis",
-            critic: "critic",
-            analyst: "insight",
-            experimentalist: msg.message_type === "tool_call" || msg.message_type === "tool_result" ? "docking" : "validation",
-          };
-          if (msg.message_type === "final") {
+          // Use explicit pipeline_node from backend when available
+          if (msg.pipeline_node) {
+            // Map compound_synthesis to synthesize for the frontend tiles
+            setActiveNode(msg.pipeline_node === "compound_synthesis" ? "synthesize" : msg.pipeline_node);
+          } else if (msg.message_type === "final") {
             setActiveNode("synthesize");
           } else {
+            // Fallback for old messages without pipeline_node
+            const nodeMap: Record<string, string> = {
+              orchestrator: "pi_analyze",
+              specialist: "hypothesis",
+              critic: "critic",
+              analyst: "insight",
+              experimentalist: "validation",
+            };
             setActiveNode(nodeMap[msg.agent_role] ?? "pi_analyze");
           }
           return { ...prev, messages: [...prev.messages, msg] };
@@ -1094,31 +1106,121 @@ export default function LabPage() {
 
       {/* ── Main workspace ─────────────────────────────────────────── */}
       {!session ? (
-        /* Empty state — floating search bar in center */
-        <div className="flex flex-1 items-center justify-center p-8">
+        /* Empty state — visual research launch panel */
+        <div className="flex flex-1 items-center justify-center p-8 relative overflow-hidden">
+          {/* Animated background particles */}
+          <div className="absolute inset-0 pointer-events-none">
+            {[...Array(6)].map((_, i) => (
+              <motion.div
+                key={`particle-${i}`}
+                className="absolute rounded-full"
+                style={{
+                  width: 4 + i * 2,
+                  height: 4 + i * 2,
+                  background: `radial-gradient(circle, ${["#14b8a6", "#8b5cf6", "#3b82f6", "#06b6d4", "#a855f7", "#0ea5e9"][i]}40, transparent)`,
+                  left: `${15 + i * 14}%`,
+                  top: `${20 + (i % 3) * 25}%`,
+                }}
+                animate={{
+                  y: [0, -20, 0, 20, 0],
+                  x: [0, 10, -10, 5, 0],
+                  scale: [1, 1.3, 0.9, 1.1, 1],
+                  opacity: [0.3, 0.6, 0.3, 0.5, 0.3],
+                }}
+                transition={{ duration: 8 + i * 2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            ))}
+            {/* Floating molecule connections */}
+            <svg className="absolute inset-0 w-full h-full opacity-[0.04]">
+              <motion.line x1="20%" y1="30%" x2="45%" y2="55%" stroke="#14b8a6" strokeWidth="1"
+                animate={{ opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 4, repeat: Infinity }} />
+              <motion.line x1="45%" y1="55%" x2="70%" y2="35%" stroke="#8b5cf6" strokeWidth="1"
+                animate={{ opacity: [0.5, 0.2, 0.5] }} transition={{ duration: 5, repeat: Infinity }} />
+              <motion.line x1="70%" y1="35%" x2="85%" y2="60%" stroke="#3b82f6" strokeWidth="1"
+                animate={{ opacity: [0.2, 0.6, 0.2] }} transition={{ duration: 3, repeat: Infinity }} />
+              <motion.circle cx="20%" cy="30%" r="3" fill="#14b8a6"
+                animate={{ r: [3, 5, 3] }} transition={{ duration: 3, repeat: Infinity }} />
+              <motion.circle cx="45%" cy="55%" r="3" fill="#8b5cf6"
+                animate={{ r: [3, 5, 3] }} transition={{ duration: 4, repeat: Infinity }} />
+              <motion.circle cx="70%" cy="35%" r="3" fill="#3b82f6"
+                animate={{ r: [3, 5, 3] }} transition={{ duration: 5, repeat: Infinity }} />
+            </svg>
+          </div>
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="w-full max-w-2xl"
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-2xl relative z-10"
           >
             {/* Main search card */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-              <div className="p-8">
-                {/* Title */}
-                <h2 className="text-3xl font-bold text-slate-900 mb-2 text-center">Research Question</h2>
-                <p className="text-center text-slate-500 text-sm mb-8">
-                  Describe what you want to investigate
-                </p>
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur-sm shadow-xl overflow-hidden">
+              {/* Visual header with animated DNA double helix */}
+              <div className="relative bg-gradient-to-r from-teal-600 via-cyan-600 to-blue-600 px-8 pt-8 pb-10 overflow-hidden">
+                {/* Animated helix strands */}
+                <div className="absolute inset-0 opacity-20">
+                  {[...Array(12)].map((_, i) => (
+                    <motion.div
+                      key={`helix-${i}`}
+                      className="absolute w-1.5 h-1.5 rounded-full bg-white"
+                      style={{ left: `${8 + i * 8}%` }}
+                      animate={{
+                        y: [0, -8, 0, 8, 0],
+                        opacity: [0.3, 0.8, 0.3, 0.8, 0.3],
+                      }}
+                      transition={{
+                        duration: 3,
+                        delay: i * 0.25,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  ))}
+                  {[...Array(12)].map((_, i) => (
+                    <motion.div
+                      key={`helix2-${i}`}
+                      className="absolute w-1.5 h-1.5 rounded-full bg-white"
+                      style={{ left: `${8 + i * 8}%`, top: "60%" }}
+                      animate={{
+                        y: [8, 0, -8, 0, 8],
+                        opacity: [0.8, 0.3, 0.8, 0.3, 0.8],
+                      }}
+                      transition={{
+                        duration: 3,
+                        delay: i * 0.25,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  ))}
+                </div>
 
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-3">
+                    <motion.div
+                      animate={{ rotate: [0, 360] }}
+                      transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                    >
+                      <Atom size={28} className="text-white/90" />
+                    </motion.div>
+                    <h2 className="text-2xl font-bold text-white">Virtual Wet Lab</h2>
+                  </div>
+                  <p className="text-teal-100 text-sm max-w-md">
+                    AI-powered research agents analyze proteins, predict structures, dock compounds, and generate testable hypotheses.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-8 pt-6">
                 {/* Search input */}
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Research Question</label>
                 <div className="flex gap-3 mb-6">
                   <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !isRunning && !loading && handleRun()}
-                    placeholder="e.g., BRCA1-TP53 interactions in breast cancer…"
+                    placeholder="e.g., BRCA1-TP53 interactions in breast cancer..."
                     disabled={isRunning || loading}
                     autoFocus
                     className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:opacity-50 transition-colors"
@@ -1139,41 +1241,74 @@ export default function LabPage() {
                   </motion.button>
                 </div>
 
-                {/* Example queries */}
+                {/* Example queries as visual cards */}
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Examples</p>
-                  <div className="space-y-2">
-                    {EXAMPLE_QUERIES.map((q) => (
-                      <button
-                        key={q}
-                        onClick={() => setQuery(q)}
-                        disabled={isRunning || loading}
-                        className="w-full text-left rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 transition-all disabled:opacity-40"
-                      >
-                        {q}
-                      </button>
-                    ))}
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Quick Start</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {EXAMPLE_QUERIES.map((q, idx) => {
+                      const icons = [Dna, FlaskConical, Target, Pill];
+                      const colors = ["#7C3AED", "#0369A1", "#B45309", "#DC2626"];
+                      const QIcon = icons[idx % icons.length];
+                      return (
+                        <motion.button
+                          key={q}
+                          onClick={() => setQuery(q)}
+                          disabled={isRunning || loading}
+                          whileHover={{ scale: 1.01, y: -1 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="text-left rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-xs text-slate-600 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 transition-all disabled:opacity-40 flex items-start gap-2.5"
+                        >
+                          <div
+                            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md mt-0.5"
+                            style={{ backgroundColor: colors[idx % colors.length] + "12" }}
+                          >
+                            <QIcon size={12} style={{ color: colors[idx % colors.length] }} />
+                          </div>
+                          <span className="line-clamp-2 leading-relaxed">{q}</span>
+                        </motion.button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
-              {/* Bottom agent row */}
-              <div className="border-t border-slate-100 bg-slate-50/50 px-8 py-6">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Research Team</p>
-                <div className="grid grid-cols-5 gap-3">
+              {/* Bottom agent pipeline visualization */}
+              <div className="border-t border-slate-100 bg-gradient-to-r from-slate-50 to-teal-50/30 px-8 py-5">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">8-Stage Agent Pipeline</p>
+                <div className="flex items-center gap-1">
                   {[
-                    { label: "PI", desc: "Orchestrator", Icon: Brain },
-                    { label: "Insight", desc: "Analysis", Icon: Network },
-                    { label: "Hypothesis", desc: "Theory", Icon: Lightbulb },
-                    { label: "Critic", desc: "Review", Icon: ShieldCheck },
-                    { label: "Validation", desc: "Testing", Icon: TestTubes },
-                  ].map(({ label, desc, Icon }) => (
-                    <div key={label} className="rounded-lg border border-slate-200 bg-white p-2.5 text-center text-[10px]">
-                      <div className="mx-auto mb-1.5 flex h-5 w-5 items-center justify-center">
-                        <Icon size={14} className="text-slate-400 stroke-[1.5]" />
-                      </div>
-                      <p className="font-medium text-slate-700">{label}</p>
-                      <p className="text-slate-400">{desc}</p>
+                    { label: "PI", Icon: Brain, color: "#7C3AED" },
+                    { label: "KG", Icon: Network, color: "#0369A1" },
+                    { label: "AlphaFold", Icon: Atom, color: "#0891B2" },
+                    { label: "Hypothesis", Icon: Lightbulb, color: "#B45309" },
+                    { label: "Critic", Icon: ShieldCheck, color: "#DC2626" },
+                    { label: "Docking", Icon: Beaker, color: "#15803D" },
+                    { label: "Validation", Icon: TestTubes, color: "#7C3AED" },
+                    { label: "Synthesis", Icon: Sparkles, color: "#0369A1" },
+                  ].map(({ label, Icon, color }, idx) => (
+                    <div key={label} className="flex items-center">
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 + idx * 0.06 }}
+                        className="flex flex-col items-center w-[72px]"
+                      >
+                        <div
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white shadow-sm"
+                          style={{ borderColor: color + "40" }}
+                        >
+                          <Icon size={14} style={{ color }} />
+                        </div>
+                        <p className="text-[9px] font-medium text-slate-600 mt-1 truncate w-full text-center">{label}</p>
+                      </motion.div>
+                      {idx < 7 && (
+                        <motion.div
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: 1 }}
+                          transition={{ delay: 0.2 + idx * 0.06 }}
+                          className="w-2 h-px bg-slate-300 flex-shrink-0"
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1404,6 +1539,7 @@ export default function LabPage() {
                 })}
                 agentMessages={session.messages}
                 sessionId={session.session_id}
+                kgData={kgData}
               />
             </motion.div>
 

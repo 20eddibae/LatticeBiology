@@ -501,6 +501,7 @@ export interface AgentMessage {
   timestamp: string;
   message_type: "message" | "tool_call" | "tool_result" | "final" | "error";
   tool_data?: AlphaFoldResult | DockingResult | null;
+  pipeline_node?: string | null;
 }
 
 export interface LabEntity {
