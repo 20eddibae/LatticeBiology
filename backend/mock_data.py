@@ -5,7 +5,7 @@ or AI processing is unavailable.
 """
 from __future__ import annotations
 
-from .models import Author, AnnotatedText, Entity, Link, Study
+from models import Author, AnnotatedText, Entity, Link, Study
 
 # ---------------------------------------------------------------------------
 # Helper

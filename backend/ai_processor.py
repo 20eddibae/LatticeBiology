@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRelationship, Study
+from models import Author, Entity, Link, SLMEntity, SLMExtractionResult, SLMRelationship, Study
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +225,7 @@ class BioStreamProcessor:
         entities = self._build_entities(extraction.entities, corpus)
 
         # 4. Convert relationships to internal model
-        from .models import Relationship
+        from models import Relationship
         relationships = []
         entity_names = {e.text for e in entities}  # For validation
         for rel in extraction.relationships:

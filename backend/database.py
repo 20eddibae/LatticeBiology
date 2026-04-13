@@ -38,7 +38,7 @@ async def init_db() -> None:
     """Create all tables on startup (idempotent). No-op when DB is disabled."""
     if not _DB_ENABLED:
         return
-    from . import db_models  # noqa: F401 — registers ORM classes with Base.metadata
+    import db_models  # noqa: F401 — registers ORM classes with Base.metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     safe_url = DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else DATABASE_URL
@@ -50,7 +50,7 @@ async def init_db() -> None:
 # ---------------------------------------------------------------------------
 
 def _study_to_row(study: Any) -> Any:
-    from . import db_models
+    import db_models
     d = study.model_dump(mode="json")
     return db_models.StudyRow(
         accession=d["accession"],
@@ -69,7 +69,7 @@ def _study_to_row(study: Any) -> Any:
 
 
 def _row_to_study(row: Any) -> Any:
-    from .models import Study
+    from models import Study
     return Study(
         accession=row.accession,
         title=row.title,
@@ -87,7 +87,7 @@ def _row_to_study(row: Any) -> Any:
 
 
 def _row_to_run(row: Any) -> Any:
-    from .models import PipelineRun
+    from models import PipelineRun
     return PipelineRun(
         run_id=row.run_id,
         triggered_at=row.triggered_at,
@@ -104,7 +104,7 @@ def _row_to_run(row: Any) -> Any:
 
 async def save_study(session: AsyncSession, study: Any) -> None:
     """Upsert a Study — insert on first save, update fields on subsequent saves."""
-    from . import db_models
+    import db_models
     d = study.model_dump(mode="json")
     row = await session.get(db_models.StudyRow, study.accession)
     if row is None:
@@ -125,20 +125,20 @@ async def save_study(session: AsyncSession, study: Any) -> None:
 
 
 async def get_study_from_db(session: AsyncSession, accession: str) -> Optional[Any]:
-    from . import db_models
+    import db_models
     row = await session.get(db_models.StudyRow, accession)
     return _row_to_study(row) if row else None
 
 
 async def get_all_studies_from_db(session: AsyncSession) -> List[Any]:
-    from . import db_models
+    import db_models
     result = await session.execute(select(db_models.StudyRow))
     return [_row_to_study(row) for row in result.scalars().all()]
 
 
 async def save_run(session: AsyncSession, run: Any) -> None:
     """Upsert a PipelineRun."""
-    from . import db_models
+    import db_models
     d = run.model_dump(mode="json")
     row = await session.get(db_models.PipelineRunRow, run.run_id)
     if row is None:
@@ -159,13 +159,13 @@ async def save_run(session: AsyncSession, run: Any) -> None:
 
 
 async def get_run_from_db(session: AsyncSession, run_id: str) -> Optional[Any]:
-    from . import db_models
+    import db_models
     row = await session.get(db_models.PipelineRunRow, run_id)
     return _row_to_run(row) if row else None
 
 
 async def get_all_runs_from_db(session: AsyncSession) -> List[Any]:
-    from . import db_models
+    import db_models
     result = await session.execute(
         select(db_models.PipelineRunRow).order_by(desc(db_models.PipelineRunRow.triggered_at))
     )

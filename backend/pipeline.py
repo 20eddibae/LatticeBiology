@@ -10,9 +10,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from .ai_processor import BioStreamProcessor
-from .biostudies import fetch_study, search_studies
-from .database import (
+from ai_processor import BioStreamProcessor
+from biostudies import fetch_study, search_studies
+from database import (
     AsyncSessionLocal,
     _DB_ENABLED,
     get_all_runs_from_db,
@@ -20,8 +20,8 @@ from .database import (
     save_run,
     save_study,
 )
-from .mock_data import ALL_STUDIES, STUDIES_BY_ACCESSION
-from .models import (
+from mock_data import ALL_STUDIES, STUDIES_BY_ACCESSION
+from models import (
     AnnotatedText,
     PipelineRun,
     PipelineStage,

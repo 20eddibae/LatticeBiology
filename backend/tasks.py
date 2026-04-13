@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .celery_app import _CELERY_ENABLED, celery_app
+from celery_app import _CELERY_ENABLED, celery_app
 
 logger = logging.getLogger(__name__)
 
