@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: latticebio-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false # Set manually in Render dashboard
+      - key: LLM_AGENT_MODEL
+        value: llama-3.1-8b-instant
+      - key: LLM_NER_MODEL
+        value: llama-3.1-8b-instant
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./biostream.db
+      - key: BIOSTUDIES_TIMEOUT
+        value: "30"
+      - key: PIPELINE_QUERY
+        value: cancer
+      - key: PIPELINE_PAGE_SIZE
+        value: "10"

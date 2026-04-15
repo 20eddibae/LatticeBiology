@@ -23,4 +23,5 @@ celerybeat.pid
 
 CLAUDE.md
 
-
+# Vercel
+.vercel/
