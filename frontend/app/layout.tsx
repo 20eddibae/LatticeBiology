@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Playfair_Display } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import BackendStatus from "@/components/BackendStatus";
 
 const playfairDisplay = Playfair_Display({
   subsets: ["latin"],
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@5.8.0/build/viewer/molstar.css" />
       </head>
       <body className="bg-slate-50 text-slate-900 antialiased">
+        <BackendStatus />
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto bg-slate-50">

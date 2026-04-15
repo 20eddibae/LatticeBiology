@@ -277,7 +277,7 @@ async function safeFetch<T>(url: string, options?: RequestInit): Promise<T | nul
   try {
     const res = await fetch(url, {
       ...options,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(45000),
     });
     if (!res.ok) return null;
     return res.json() as Promise<T>;
